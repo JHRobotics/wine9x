@@ -29,6 +29,8 @@ BASE_wined3d.dll = 0x01A00000
 BASE_d3d8.dll    = 0x00400000
 BASE_d3d9.dll    = 0x00400000
 
+NULLOUT=$(if $(filter $(OS),Windows_NT),NUL,/dev/null)
+
 GIT      ?= git
 GIT_IS   := $(shell $(GIT) rev-parse --is-inside-work-tree 2> $(NULLOUT))
 ifeq ($(GIT_IS),true)
@@ -161,8 +163,8 @@ else
     -DVERTEX_ARRAY_BGRA_BROKEN
 
   ifdef VERSION_BUILD
-    CFLAGS  += -MESA9X_BUILD=$(VERSION_BUILD)
-    RESDEF  += -MESA9X_BUILD=$(VERSION_BUILD)
+    CFLAGS  += -DWINE9X_BUILD=$(VERSION_BUILD)
+    RESDEF  += -DWINE9X_BUILD=$(VERSION_BUILD)
   endif
 
   WINED3D_LIBS  = pthread9x/crtfix$(OBJ) -static -L. -Lpthread9x -static -lpthread -lgdi32 -lopengl32
