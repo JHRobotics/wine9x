@@ -1,0 +1,40 @@
+#ifdef WINDRES
+#undef RC_INVOKED
+#endif
+
+#ifndef RC_INVOKED
+#include "winuser.h"
+
+1 VERSIONINFO
+FILEVERSION WINE_FILEVERSION
+PRODUCTVERSION WINE_PRODUCTVERSION
+FILEOS 0x10004
+FILETYPE 0x2
+{
+BLOCK "StringFileInfo"
+{	
+	BLOCK "040904E4"
+	{
+		VALUE "FileDescription", WINE_FILEDESCRIPTION_STR
+		VALUE "FileVersion", WINE_FILEVERSION_STR
+		VALUE "InternalName", WINE_FILENAME_STR
+		VALUE "OriginalFilename", WINE_FILENAME_STR
+		#ifdef WINE_PRODUCTNAME_STR
+		VALUE "ProductName", WINE_PRODUCTNAME_STR
+		#else
+		VALUE "ProductName", "WINE DirectX Wrapper"
+		#endif
+		VALUE "ProductVersion", WINE_PRODUCTVERSION_STR
+		#ifdef WINE_EXTRAVALUES
+		WINE_EXTRAVALUES
+		#endif
+	}
+}
+
+BLOCK "VarFileInfo"
+{
+	VALUE "Translation", 0x0409, 0x04E4
+}
+}
+
+#endif

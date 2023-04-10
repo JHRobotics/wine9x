@@ -1,0 +1,74 @@
+################################################################################
+# MSC configuration file                                                       #
+# Required version of Microsoft Visual Studio is 10 or greater                 #
+#                                                                              #
+# WARNING: binaries produced by this setup won't run on Windows 9x anyway,     #
+#          so it's useful for debuging under newer OS.                         #
+################################################################################
+
+MSC=1
+
+#
+# basic paths and names configuration
+#
+
+# force using detele utility - microsoft or GNU one
+#RM = rm -f
+#RM = del /F /S /Q
+
+# compiler names
+CC  = cl
+LD  = cl
+AR = lib
+WINDRES = rc
+
+#
+# optimalizatin/debug configuration
+#
+
+# if enabled optimalize for speed nor for debug
+#SPEED := 1
+
+# enable asserts and orders debug/instrumentation functions on code
+#DEBUG := 1
+
+# if enabled optimalize for speed nor for debug
+SPEED=1
+
+# enable asserts and orders debug/instrumentation functions on code,
+# but add extra systems calls, so result potentialy won't run on Windows 9x
+#DEBUG=1
+
+### Truth table ###
+# 1 = defined 
+# 0 = not defined
+# X = doesn't matter
+#
+# SPEED | DEBUG | Result
+# --------------|--------
+#   1   |   X   | optimalized for speed, no asserts, logging controled by WINED3D_SILENT
+# --------------|--------
+#   0   |   0   | optimalized for debug, no asserts, logging controled by WINED3D_SILENT
+# --------------|--------
+#   0   |   1   | optimalized for debug, asserts enabled, logging controled by WINED3D_SILENT (may not run on Win9x)
+# --------------|--------
+
+# enable link-time optimalization, linking with it is super slow, and build is broken anyway (!)
+# DON'T use this yet!
+#LTO=1
+
+# Link to wined3d.lib (libwined3d.a) instead of wined3d.dll
+# BUT if program using more DX9 interfaces (for example ddraw for video and
+# DX8/DX9 for 3D, program will crash or freeze because of shared locks)
+#WINED3D_STATIC=1
+
+# Mute ALL debug output, see compact/debug.log for more logging options
+WINED3D_SILENT=1
+
+# runtime
+# /MT  - static C runtime, release
+# /MTd - static C runtime, debug
+# /MD  - dynamic C runtime, required msvcrXXXX.dll (part of Visual Studio Redistrubutable), release
+# /MDd - same as /MD, but debug
+# with static linking, you can't combine modules with different runtime
+MSC_RUNTIME = /MT

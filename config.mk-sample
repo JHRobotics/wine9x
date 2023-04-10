@@ -1,0 +1,80 @@
+################################################################################
+# MINGW/GCC Sample configuration file                                          #
+################################################################################
+
+#
+# basic paths and names configuration
+#
+
+# compiler names
+CC = gcc
+LD = gcc
+AR = ar
+WINDRES = $(PREFIX)windres
+
+# force using delete utility - microsoft or GNU one
+RM = rm -f
+
+#
+# optimalizatin/debug configuration
+#
+
+# if enabled optimalize for speed nor for debug
+SPEED=1
+
+# enable asserts and orders debug/instrumentation functions on code,
+# but add extra systems calls, so result potentialy won't run on Windows 9x
+#DEBUG=1
+
+### Truth table ###
+# 1 = defined 
+# 0 = not defined
+# X = doesn't matter
+#
+# SPEED | DEBUG | Result
+# --------------|--------
+#   1   |   X   | optimalized for speed, no asserts, logging controled by WINED3D_SILENT
+# --------------|--------
+#   0   |   0   | optimalized for debug, no asserts, logging controled by WINED3D_SILENT
+# --------------|--------
+#   0   |   1   | optimalized for debug, asserts enabled, logging controled by WINED3D_SILENT (may not run on Win9x)
+# --------------|--------
+
+# enable link-time optimalization, linking with it is super slow, and build is broken anyway (!)
+# DON'T use this yet!
+#LTO=1
+
+# Link to wined3d.lib (libwined3d.a) instead of wined3d.dll
+# BUT if program using more DX9 interfaces (for example ddraw for video and
+# DX8/DX9 for 3D, program will crash or freeze because of shared locks)
+#WINED3D_STATIC=1
+
+# Mute ALL debug output, see compact/debug.log for more logging options
+WINED3D_SILENT=1
+
+# allow extra tune for specific CPU, allow instrument C code by MMX, SSE or AVX instruction, but be
+# careful - in mingw 4.8.x is SSE instrumentation broken, so use this only with newer GCC!
+# Don't use -march=native here because it means usage of AVX instruction everyvere so thats could be problem
+# in all mutlithread applications (Windows Media Player is common example), instead target to last CPU without
+# AVX (core2 or westmere)
+#TUNE += -march=core2 -mtune=haswell -ffast-math
+# If you wish target Windows 95, situation is more complicated, because we must avoid even all SSE,
+# so last real target without SSE is pentium2, but optimize for much newer CPU
+#TUNE = -march=pentium2 -mtune=haswell
+# Same option but for older GCC
+TUNE += -march=pentium2 -mtune=core2
+# this flags reduce size of library of few percent
+TUNE += -fdata-sections -ffunction-sections
+# Remove all debug symbols, so reduce file size by a lot, turn off only if you wish debug
+# this library
+#TUNE_LD=,--strip-all
+
+# don't remove thread-safe data, but in Windows 95 fail to load this library
+# by LoadLibrary api call.
+#NO_STATIC_TLS_REMOVE=1
+
+# library pthread9x replacing malloc by HeapAlloc and using more separeated heaps
+# to reduce fragmentation. If this option is turned on, malloc will allocate memory
+# on default heap, resulting bit less memory usage BUT if application manipulating
+# with program heap somehow it could lead to crash
+#DEFAULT_HEAP=1
