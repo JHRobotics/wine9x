@@ -344,6 +344,9 @@ ddraw.dll: $(switcher_OBJS) switcher/ddraw.res
 ddrawme.dll: $(switcher_OBJS) switcher/ddrawme.res
 	$(LD) $(CFLAGS) $(switcher_OBJS) switcher/ddrawme.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
 
+ddreplacer.exe: ddreplacer.c$(OBJ)
+	$(CC) $< -o $@
+
 ifdef OBJ
 clean:
 	-$(RM) $(wined3d_OBJS)
