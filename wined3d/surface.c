@@ -3898,7 +3898,11 @@ static void surface_copy_simple_location(struct wined3d_surface *surface, DWORD 
         context_release(context);
         return;
     }
-    memcpy(dst.addr, src.addr, size);
+    
+    if(dst.addr && src.addr)
+    {
+    	memcpy(dst.addr, src.addr, size);
+    }
 }
 
 /* Context activation is done by the caller. */

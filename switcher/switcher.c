@@ -387,7 +387,7 @@ void InitLib(BYTE *addr)
 	
 		if(!lnk->loaded)
 		{
-			DBG_printf("Loading: %s\n", lnk->dllname)
+			DBG_printf("Loading: %s\n", lnk->dllname);
 			
 			lnk->dll = LoadLibraryA(lnk->dllname);
 			
