@@ -43,7 +43,7 @@ int main(int argc, char **argv)
 		fs = ftell(fr);
 		fseek(fr, 0, SEEK_SET);
 		
-		mem = malloc(fs);
+		mem = (uint8_t*)malloc(fs);
 		if(mem != NULL)
 		{
 			if(fread(mem, 1, fs, fr) == fs)
