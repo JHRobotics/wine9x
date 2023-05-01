@@ -24,6 +24,7 @@ DEPS=Makefile config.mk
 # some usually free base address to easier debug
 BASE_ddraw.dll   = 0xBAAA0000
 BASE_ddrawme.dll = 0xBAAA0000
+BASE_ddraw_ver.dll = 0xBAAA0000
 BASE_dwine.dll   = 0xBA9A0000
 BASE_wined3d.dll = 0x01A00000
 BASE_d3d8.dll    = 0x00400000
@@ -203,7 +204,7 @@ else
   LIBSTATIC = $(AR) rcs -o $@
 endif
 
-TARGETS := ddraw.dll ddrawme.dll dwine.dll d3d8.dll d3d9.dll
+TARGETS := ddraw.dll ddrawme.dll ddraw_ver.dll dwine.dll d3d8.dll d3d9.dll
 
 all: $(TARGETS)
 .PHONY: all clean
@@ -302,6 +303,7 @@ DEF_d3d8.dll    = d3d8/d3d8.def
 DEF_d3d9.dll    = d3d9/d3d9.def
 DEF_ddraw.dll   = switcher/ddraw.def 
 DEF_ddrawme.dll = switcher/ddraw.def 
+DEF_ddraw_ver.dll = switcher/ddraw.def 
 
 wined3d_OBJS  := $(wined3d_SRC:.c=.c$(OBJ))
 d3d8_OBJS     := $(d3d8_SRC:.c=.c$(OBJ))
@@ -343,6 +345,9 @@ ddraw.dll: $(switcher_OBJS) switcher/ddraw.res
 
 ddrawme.dll: $(switcher_OBJS) switcher/ddrawme.res
 	$(LD) $(CFLAGS) $(switcher_OBJS) switcher/ddrawme.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
+	
+ddraw_ver.dll: $(switcher_OBJS) switcher/ddraw_ver.res
+	$(LD) $(CFLAGS) $(switcher_OBJS) switcher/ddraw_ver.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
 
 ddreplacer.exe: ddreplacer.c$(OBJ)
 	$(CC) $< -o $@
@@ -357,6 +362,7 @@ clean:
 	-$(RM) $(LIBPREFIX)wined3d_static$(LIBSUFFIX) $(LIBPREFIX)wined3d$(LIBSUFFIX) $(LIBPREFIX)dwine$(LIBSUFFIX) $(LIBPREFIX)d3d8$(LIBSUFFIX) $(LIBPREFIX)d3d9$(LIBSUFFIX) $(LIBPREFIX)ddraw$(LIBSUFFIX) $(LIBPREFIX)ddrawme$(LIBSUFFIX)
 	-$(RM) switcher/ddraw.res
 	-$(RM) switcher/ddrawme.res
+	-$(RM) switcher/ddraw_ver.res
 	-$(RM) $(TARGETS)
 	-$(RM) wined3d.dll
 	-cd pthread9x && $(MAKE) clean

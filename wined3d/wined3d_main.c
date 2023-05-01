@@ -154,6 +154,7 @@ static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
     HKEY appkey = 0;
     DWORD len, tmpvalue;
     WNDCLASSA wc;
+    int r;
 
     wined3d_context_tls_idx = TlsAlloc();
     if (wined3d_context_tls_idx == TLS_OUT_OF_INDEXES)
@@ -192,147 +193,172 @@ static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
     act_hInstDLL = hInstDLL;
 
     DisableThreadLibraryCalls(hInstDLL);
-
-    /* @@ Wine registry key: HKCU\Software\Wine\Direct3D */
-    if ( RegOpenKeyA( HKEY_CURRENT_USER, "Software\\Wine\\Direct3D", &hkey ) ) hkey = 0;
-
-    len = GetModuleFileNameA( 0, buffer, MAX_PATH );
-    if (len && len < MAX_PATH)
+    
+    for(r = 0; r < 2; r++) /* r == 0: original wine registry path; r == 1: wine9x registry path */
     {
-        HKEY tmpkey;
-        /* @@ Wine registry key: HKCU\Software\Wine\AppDefaults\app.exe\Direct3D */
-        if (!RegOpenKeyA( HKEY_CURRENT_USER, "Software\\Wine\\AppDefaults", &tmpkey ))
-        {
-            char *p, *appname = buffer;
-            if ((p = strrchr( appname, '/' ))) appname = p + 1;
-            if ((p = strrchr( appname, '\\' ))) appname = p + 1;
-            strcat( appname, "\\Direct3D" );
-            TRACE("appname = [%s]\n", appname);
-            if (RegOpenKeyA( tmpkey, appname, &appkey )) appkey = 0;
-            RegCloseKey( tmpkey );
-        }
-    }
-
-    if (hkey || appkey)
-    {
-        if (!get_config_key_dword(hkey, appkey, "MaxVersionGL", &tmpvalue))
-        {
-            if (tmpvalue != wined3d_settings.max_gl_version)
-            {
-                ERR_(winediag)("Setting maximum allowed wined3d GL version to %u.%u.\n",
-                        tmpvalue >> 16, tmpvalue & 0xffff);
-                wined3d_settings.max_gl_version = tmpvalue;
-            }
-        }
-        if ( !get_config_key( hkey, appkey, "UseGLSL", buffer, size) )
-        {
-            if (!strcmp(buffer,"disabled"))
-            {
-                ERR_(winediag)("The GLSL shader backend has been disabled. You get to keep all the pieces if it breaks.\n");
-                TRACE("Use of GL Shading Language disabled\n");
-                wined3d_settings.glslRequested = FALSE;
-            }
-        }
-        if ( !get_config_key( hkey, appkey, "OffscreenRenderingMode", buffer, size) )
-        {
-            if (!strcmp(buffer,"backbuffer"))
-            {
-                TRACE("Using the backbuffer for offscreen rendering\n");
-                wined3d_settings.offscreen_rendering_mode = ORM_BACKBUFFER;
-            }
-            else if (!strcmp(buffer,"fbo"))
-            {
-                TRACE("Using FBOs for offscreen rendering\n");
-                wined3d_settings.offscreen_rendering_mode = ORM_FBO;
-            }
-        }
-        if ( !get_config_key_dword( hkey, appkey, "VideoPciDeviceID", &tmpvalue) )
-        {
-            int pci_device_id = tmpvalue;
-
-            /* A pci device id is 16-bit */
-            if(pci_device_id > 0xffff)
-            {
-                ERR("Invalid value for VideoPciDeviceID. The value should be smaller or equal to 65535 or 0xffff\n");
-            }
-            else
-            {
-                TRACE("Using PCI Device ID %04x\n", pci_device_id);
-                wined3d_settings.pci_device_id = pci_device_id;
-            }
-        }
-        if ( !get_config_key_dword( hkey, appkey, "VideoPciVendorID", &tmpvalue) )
-        {
-            int pci_vendor_id = tmpvalue;
-
-            /* A pci device id is 16-bit */
-            if(pci_vendor_id > 0xffff)
-            {
-                ERR("Invalid value for VideoPciVendorID. The value should be smaller or equal to 65535 or 0xffff\n");
-            }
-            else
-            {
-                TRACE("Using PCI Vendor ID %04x\n", pci_vendor_id);
-                wined3d_settings.pci_vendor_id = pci_vendor_id;
-            }
-        }
-        if ( !get_config_key( hkey, appkey, "VideoMemorySize", buffer, size) )
-        {
-            int TmpVideoMemorySize = atoi(buffer);
-            if(TmpVideoMemorySize > 0)
-            {
-                wined3d_settings.emulated_textureram = (UINT64)TmpVideoMemorySize *1024*1024;
-                TRACE("Use %iMiB = 0x%s bytes for emulated_textureram\n",
-                        TmpVideoMemorySize,
-                        wine_dbgstr_longlong(wined3d_settings.emulated_textureram));
-            }
-            else
-                ERR("VideoMemorySize is %i but must be >0\n", TmpVideoMemorySize);
-        }
-        if ( !get_config_key( hkey, appkey, "WineLogo", buffer, size) )
-        {
-            size_t len = strlen(buffer) + 1;
-
-            wined3d_settings.logo = malloc(len);
-            if (!wined3d_settings.logo) ERR("Failed to allocate logo path memory.\n");
-            else memcpy(wined3d_settings.logo, buffer, len);
-        }
-        if ( !get_config_key( hkey, appkey, "Multisampling", buffer, size) )
-        {
-            if (!strcmp(buffer, "disabled"))
-            {
-                TRACE("Multisampling disabled.\n");
-                wined3d_settings.allow_multisampling = FALSE;
-            }
-        }
-        if (!get_config_key(hkey, appkey, "StrictDrawOrdering", buffer, size)
-                && !strcmp(buffer,"enabled"))
-        {
-            TRACE("Enforcing strict draw ordering.\n");
-            wined3d_settings.strict_draw_ordering = TRUE;
-        }
-        if (!get_config_key(hkey, appkey, "AlwaysOffscreen", buffer, size)
-                && !strcmp(buffer,"disabled"))
-        {
-            TRACE("Not always rendering backbuffers offscreen.\n");
-            wined3d_settings.always_offscreen = FALSE;
-        }
-        if (!get_config_key_dword(hkey, appkey, "MaxShaderModelVS", &wined3d_settings.max_sm_vs))
-            TRACE("Limiting VS shader model to %u.\n", wined3d_settings.max_sm_vs);
-        if (!get_config_key_dword(hkey, appkey, "MaxShaderModelGS", &wined3d_settings.max_sm_gs))
-            TRACE("Limiting GS shader model to %u.\n", wined3d_settings.max_sm_gs);
-        if (!get_config_key_dword(hkey, appkey, "MaxShaderModelPS", &wined3d_settings.max_sm_ps))
-            TRACE("Limiting PS shader model to %u.\n", wined3d_settings.max_sm_ps);
-        if (!get_config_key(hkey, appkey, "DirectDrawRenderer", buffer, size)
-                && !strcmp(buffer, "gdi"))
-        {
-            TRACE("Disabling 3D support.\n");
-            wined3d_settings.no_3d = TRUE;
-        }
-    }
-
-    if (appkey) RegCloseKey( appkey );
-    if (hkey) RegCloseKey( hkey );
+	    /* @@ Wine registry key: HKCU\Software\Wine\Direct3D */
+	    if(r == 0)
+	    {
+	    	if ( RegOpenKeyA(HKEY_CURRENT_USER, "Software\\Wine\\Direct3D", &hkey ) != ERROR_SUCCESS ) hkey = 0;
+	    }
+	    else
+	    {
+	    	if ( RegOpenKeyA(HKEY_LOCAL_MACHINE, "Software\\Wine\\global", &hkey) != ERROR_SUCCESS ) hkey = 0;
+	    }
+	
+	    len = GetModuleFileNameA( 0, buffer, MAX_PATH );
+	    if (len && len < MAX_PATH)
+	    {
+	        HKEY tmpkey;
+	        LSTATUS rc;
+	        /* @@ Wine registry key: HKCU\Software\Wine\AppDefaults\app.exe\Direct3D */
+	        /* OR Wine9x key: HKLM\Software\Wine\app.exe */
+	        if(r == 0)
+	        {
+	        	rc = RegOpenKeyA( HKEY_CURRENT_USER, "Software\\Wine\\AppDefaults", &tmpkey );
+	        }
+	        else
+	        {
+	        	rc = RegOpenKeyA( HKEY_LOCAL_MACHINE, "Software\\Wine", &tmpkey );
+	        }
+	        
+	        if (rc == ERROR_SUCCESS)
+	        {
+	            char *p, *appname = buffer;
+	            if ((p = strrchr( appname, '/' ))) appname = p + 1;
+	            if ((p = strrchr( appname, '\\' ))) appname = p + 1;
+	            if(r == 0)
+	            {
+	            	strcat( appname, "\\Direct3D" );
+	            }
+	            
+	            TRACE("appname = [%s]\n", appname);
+	            if (RegOpenKeyA( tmpkey, appname, &appkey )) appkey = 0;
+	            RegCloseKey( tmpkey );
+	        }
+	    }
+	
+	    if (hkey || appkey)
+	    {
+	        if (!get_config_key_dword(hkey, appkey, "MaxVersionGL", &tmpvalue))
+	        {
+	            if (tmpvalue != wined3d_settings.max_gl_version)
+	            {
+	                ERR_(winediag)("Setting maximum allowed wined3d GL version to %u.%u.\n",
+	                        tmpvalue >> 16, tmpvalue & 0xffff);
+	                wined3d_settings.max_gl_version = tmpvalue;
+	            }
+	        }
+	        if ( !get_config_key( hkey, appkey, "UseGLSL", buffer, size) )
+	        {
+	            if (!strcmp(buffer,"disabled"))
+	            {
+	                ERR_(winediag)("The GLSL shader backend has been disabled. You get to keep all the pieces if it breaks.\n");
+	                TRACE("Use of GL Shading Language disabled\n");
+	                wined3d_settings.glslRequested = FALSE;
+	            }
+	        }
+	        if ( !get_config_key( hkey, appkey, "OffscreenRenderingMode", buffer, size) )
+	        {
+	            if (!strcmp(buffer,"backbuffer"))
+	            {
+	                TRACE("Using the backbuffer for offscreen rendering\n");
+	                wined3d_settings.offscreen_rendering_mode = ORM_BACKBUFFER;
+	            }
+	            else if (!strcmp(buffer,"fbo"))
+	            {
+	                TRACE("Using FBOs for offscreen rendering\n");
+	                wined3d_settings.offscreen_rendering_mode = ORM_FBO;
+	            }
+	        }
+	        if ( !get_config_key_dword( hkey, appkey, "VideoPciDeviceID", &tmpvalue) )
+	        {
+	            int pci_device_id = tmpvalue;
+	
+	            /* A pci device id is 16-bit */
+	            if(pci_device_id > 0xffff)
+	            {
+	                ERR("Invalid value for VideoPciDeviceID. The value should be smaller or equal to 65535 or 0xffff\n");
+	            }
+	            else
+	            {
+	                TRACE("Using PCI Device ID %04x\n", pci_device_id);
+	                wined3d_settings.pci_device_id = pci_device_id;
+	            }
+	        }
+	        if ( !get_config_key_dword( hkey, appkey, "VideoPciVendorID", &tmpvalue) )
+	        {
+	            int pci_vendor_id = tmpvalue;
+	
+	            /* A pci device id is 16-bit */
+	            if(pci_vendor_id > 0xffff)
+	            {
+	                ERR("Invalid value for VideoPciVendorID. The value should be smaller or equal to 65535 or 0xffff\n");
+	            }
+	            else
+	            {
+	                TRACE("Using PCI Vendor ID %04x\n", pci_vendor_id);
+	                wined3d_settings.pci_vendor_id = pci_vendor_id;
+	            }
+	        }
+	        if ( !get_config_key( hkey, appkey, "VideoMemorySize", buffer, size) )
+	        {
+	            int TmpVideoMemorySize = atoi(buffer);
+	            if(TmpVideoMemorySize > 0)
+	            {
+	                wined3d_settings.emulated_textureram = (UINT64)TmpVideoMemorySize *1024*1024;
+	                TRACE("Use %iMiB = 0x%s bytes for emulated_textureram\n",
+	                        TmpVideoMemorySize,
+	                        wine_dbgstr_longlong(wined3d_settings.emulated_textureram));
+	            }
+	            else
+	                ERR("VideoMemorySize is %i but must be >0\n", TmpVideoMemorySize);
+	        }
+	        if ( !get_config_key( hkey, appkey, "WineLogo", buffer, size) )
+	        {
+	            size_t len = strlen(buffer) + 1;
+	
+	            wined3d_settings.logo = malloc(len);
+	            if (!wined3d_settings.logo) ERR("Failed to allocate logo path memory.\n");
+	            else memcpy(wined3d_settings.logo, buffer, len);
+	        }
+	        if ( !get_config_key( hkey, appkey, "Multisampling", buffer, size) )
+	        {
+	            if (!strcmp(buffer, "disabled"))
+	            {
+	                TRACE("Multisampling disabled.\n");
+	                wined3d_settings.allow_multisampling = FALSE;
+	            }
+	        }
+	        if (!get_config_key(hkey, appkey, "StrictDrawOrdering", buffer, size)
+	                && !strcmp(buffer,"enabled"))
+	        {
+	            TRACE("Enforcing strict draw ordering.\n");
+	            wined3d_settings.strict_draw_ordering = TRUE;
+	        }
+	        if (!get_config_key(hkey, appkey, "AlwaysOffscreen", buffer, size)
+	                && !strcmp(buffer,"disabled"))
+	        {
+	            TRACE("Not always rendering backbuffers offscreen.\n");
+	            wined3d_settings.always_offscreen = FALSE;
+	        }
+	        if (!get_config_key_dword(hkey, appkey, "MaxShaderModelVS", &wined3d_settings.max_sm_vs))
+	            TRACE("Limiting VS shader model to %u.\n", wined3d_settings.max_sm_vs);
+	        if (!get_config_key_dword(hkey, appkey, "MaxShaderModelGS", &wined3d_settings.max_sm_gs))
+	            TRACE("Limiting GS shader model to %u.\n", wined3d_settings.max_sm_gs);
+	        if (!get_config_key_dword(hkey, appkey, "MaxShaderModelPS", &wined3d_settings.max_sm_ps))
+	            TRACE("Limiting PS shader model to %u.\n", wined3d_settings.max_sm_ps);
+	        if (!get_config_key(hkey, appkey, "DirectDrawRenderer", buffer, size)
+	                && !strcmp(buffer, "gdi"))
+	        {
+	            TRACE("Disabling 3D support.\n");
+	            wined3d_settings.no_3d = TRUE;
+	        }
+	    }
+	
+	    if (appkey) RegCloseKey( appkey );
+	    if (hkey) RegCloseKey( hkey );
+	  }
     
     /* windows 9x require to inicialize critical section */
     InitializeCriticalSection(&wined3d_wndproc_cs);

@@ -11,23 +11,23 @@
 #include "wine9x.h"
 
 1 VERSIONINFO
-FILEVERSION 5,4,0,904
-PRODUCTVERSION 5,4,0,904
-FILEOS 0x10001
+FILEVERSION 4,09,00,0904
+PRODUCTVERSION 4,09,00,0904
+FILEOS 0x10004
 FILETYPE 0x2
 {
 BLOCK "StringFileInfo"
-{
+{	
 	BLOCK "040904E4"
 	{
 		VALUE "CompanyName", "Microsoft Corporation"
-		VALUE "FileDescription", "Microsoft Direct3D"
-		VALUE "FileVersion", "5.04.00.0904"
-		VALUE "InternalName", "D3D9.dll"
+		VALUE "FileDescription", "Microsoft DirectDraw"
+		VALUE "FileVersion", "4.09.00.0904"
+		VALUE "InternalName", "DDraw.dll"
 		VALUE "LegalCopyright", "Copyright © Microsoft Corporation.  All rights reserved."
-		VALUE "OriginalFilename", "D3D9.dll"
+		VALUE "OriginalFilename", "DDraw.dll"
 		VALUE "ProductName", "WINE DirectX Wrapper " WINE9X_VERSION_STR
-		VALUE "ProductVersion", "5.04.00.0904"
+		VALUE "ProductVersion", "4.09.00.0904"
 	}
 }
 

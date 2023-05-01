@@ -2,6 +2,10 @@
 #undef RC_INVOKED
 #endif
 #ifndef RC_INVOKED
+
+/* shutdown some MinGW warnings */
+#define _XMMINTRIN_H_INCLUDED
+
 #include "winuser.h"
 
 #include "wine9x.h"
