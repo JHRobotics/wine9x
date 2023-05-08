@@ -1441,6 +1441,9 @@ static const struct gpu_description gpu_description_table[] =
     /* VMware */
     {HW_VENDOR_VMWARE,     CARD_VMWARE_SVGA3D,             "VMware SVGA 3D (WDDM)",            DRIVER_VMWARE,           128},
     
+    /* VMware */
+    {HW_VENDOR_3DFX,      CARD_VOODOO_BANSHEE,             "Voodoo Banshee",                   DRIVER_VMWARE,           16},
+    
     /* Chromium */
     {HW_VENDOR_CHROMIUM,   CARD_CHROMIUM,                  "VoodooBox VGA Adapter (WDDM)",                              DRIVER_CHROMIUM,       128},
 
@@ -4004,11 +4007,13 @@ static BOOL wined3d_adapter_init_gl_caps(struct wined3d_adapter *adapter)
     {
       gl_info->supported[ARB_VERTEX_SHADER] = FALSE;
       gl_info->supported[ARB_HALF_FLOAT_PIXEL] = FALSE;
+      wined3d_settings.vertex_array_brga_broken = TRUE;
     }
     
     if(strstr(gl_renderer_str, "SVGA3D"))
     {
     	gl_info->supported[ARB_DRAW_ELEMENTS_BASE_VERTEX] = FALSE;
+    	wined3d_settings.vertex_array_brga_broken = TRUE;
     }
 
     return TRUE;
@@ -4378,7 +4383,7 @@ HRESULT CDECL wined3d_set_adapter_display_mode(struct wined3d *wined3d,
         format = wined3d_get_format(&adapter->gl_info, mode->format_id);
 
         new_mode.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
-        
+   
         if(wined3d_settings.force32bit) /* for VMWSvga where accel works only on 32 bit mode */
         {
         	new_mode.dmBitsPerPel = 4 * CHAR_BIT;

@@ -1152,16 +1152,18 @@ static void surface_unload(struct wined3d_resource *resource)
          * but we can't set the sysmem INDRAWABLE because when we're rendering the swapchain
          * or the depth stencil into an FBO the texture or render buffer will be removed
          * and all flags get lost */
-        surface_prepare_system_memory(surface);
-        memset(surface->resource.heap_memory, 0, surface->resource.size);
-        surface_validate_location(surface, WINED3D_LOCATION_SYSMEM);
-        surface_invalidate_location(surface, ~WINED3D_LOCATION_SYSMEM);
-
-        /* We also get here when the ddraw swapchain is destroyed, for example
-         * for a mode switch. In this case this surface won't necessarily be
-         * an implicit surface. We have to mark it lost so that the
-         * application can restore it after the mode switch. */
-        surface->flags |= SFLAG_LOST;
+        if (resource->usage & WINED3DUSAGE_DEPTHSTENCIL)
+        {
+            surface_validate_location(surface, WINED3D_LOCATION_DISCARDED);
+            surface_invalidate_location(surface, ~WINED3D_LOCATION_DISCARDED);
+        }
+        else
+        {
+            surface_prepare_system_memory(surface);
+            memset(surface->resource.heap_memory, 0, surface->resource.size);
+            surface_validate_location(surface, WINED3D_LOCATION_SYSMEM);
+            surface_invalidate_location(surface, ~WINED3D_LOCATION_SYSMEM);
+        }
     }
     else
     {
@@ -2916,7 +2918,10 @@ void surface_prepare_rb(struct wined3d_surface *surface, const struct wined3d_gl
          * AMD has a similar feature called Enhanced Quality Anti-Aliasing (EQAA),
          * but it does not have an equivalent OpenGL extension. */
         if (surface->resource.multisample_type == WINED3D_MULTISAMPLE_NON_MASKABLE)
-            samples = surface->resource.multisample_quality;
+        {
+            //samples = surface->resource.multisample_quality; // wine 1.7.55
+            samples = 1u << (surface->resource.multisample_quality + 1); // wine 1.8.7
+        }
         else
             samples = surface->resource.multisample_type;
 
@@ -3705,10 +3710,10 @@ void surface_load_ds_location(struct wined3d_surface *surface, struct wined3d_co
         return;
     }
 
+    wined3d_surface_prepare(surface, context, location);
     if (surface->locations & WINED3D_LOCATION_DISCARDED)
     {
         TRACE("Surface was discarded, no need copy data.\n");
-        wined3d_surface_prepare(surface, context, location);
         surface->locations &= ~WINED3D_LOCATION_DISCARDED;
         surface->locations |= location;
         surface->ds_current_size.cx = surface->resource.width;
@@ -4191,7 +4196,7 @@ HRESULT surface_load_location(struct wined3d_surface *surface, struct wined3d_co
         {
             WARN("Operation requires %#x access, but surface only has %#x.\n",
                     required_access, surface->resource.access_flags);
-            return WINED3DERR_INVALIDCALL;
+            //return WINED3DERR_INVALIDCALL;
         }
     //}
 
@@ -4199,7 +4204,8 @@ HRESULT surface_load_location(struct wined3d_surface *surface, struct wined3d_co
     {
         ERR("Surface %p does not have any up to date location.\n", surface);
         surface->flags |= SFLAG_LOST;
-        return WINED3DERR_DEVICELOST;
+        //return WINED3DERR_DEVICELOST;
+        return WINED3DERR_INVALIDCALL;
     }
 
     switch (location)
@@ -4293,6 +4299,7 @@ static BOOL ffp_blit_supported(const struct wined3d_gl_info *gl_info,
                 return FALSE;
             }
         case WINED3D_BLIT_OP_COLOR_BLIT:
+        case WINED3D_BLIT_OP_COLOR_BLIT_ALPHATEST:
             if (TRACE_ON(d3d_surface) && TRACE_ON(d3d))
             {
                 TRACE("Checking support for fixup:\n");
@@ -4382,7 +4389,7 @@ static HRESULT ffp_blit_depth_fill(struct wined3d_device *device, struct wined3d
     return WINED3D_OK;
 }
 
-static void ffp_blit_blit_surface(struct wined3d_device *device, DWORD filter,
+static void ffp_blit_blit_surface(struct wined3d_device *device, enum wined3d_blit_op op, DWORD filter,
         struct wined3d_surface *src_surface, const RECT *src_rect,
         struct wined3d_surface *dst_surface, const RECT *dst_rect,
         const struct wined3d_color_key *color_key)
@@ -4398,8 +4405,16 @@ static void ffp_blit_blit_surface(struct wined3d_device *device, DWORD filter,
     wined3d_texture_set_color_key(src_surface->container, WINED3D_CKEY_SRC_BLT, color_key);
 
     context = context_acquire(device, dst_surface);
+    
+    if (op == WINED3D_BLIT_OP_COLOR_BLIT_ALPHATEST)
+        glEnable(GL_ALPHA_TEST);
+    
     surface_blt_to_drawable(device, context, filter,
             !!color_key, src_surface, src_rect, dst_surface, dst_rect);
+            
+    if (op == WINED3D_BLIT_OP_COLOR_BLIT_ALPHATEST)
+        glDisable(GL_ALPHA_TEST);
+            
     context_release(context);
 
     /* Restore the color key parameters */
@@ -5063,7 +5078,7 @@ static HRESULT cpu_blit_depth_fill(struct wined3d_device *device,
     return WINED3DERR_INVALIDCALL;
 }
 
-static void cpu_blit_blit_surface(struct wined3d_device *device, DWORD filter,
+static void cpu_blit_blit_surface(struct wined3d_device *device, enum wined3d_blit_op op, DWORD filter,
         struct wined3d_surface *src_surface, const RECT *src_rect,
         struct wined3d_surface *dst_surface, const RECT *dst_rect,
         const struct wined3d_color_key *color_key)
@@ -5099,7 +5114,8 @@ HRESULT CDECL wined3d_surface_blt(struct wined3d_surface *dst_surface, const REC
             | WINEDDBLT_KEYSRCOVERRIDE
             | WINEDDBLT_WAIT
             | WINEDDBLT_DEPTHFILL
-            | WINEDDBLT_DONOTWAIT;
+            | WINEDDBLT_DONOTWAIT
+            | WINEDDBLT_ALPHATEST;
 
     TRACE("dst_surface %p, dst_rect_in %s, src_surface %p, src_rect_in %s, flags %#x, fx %p, filter %s.\n",
             dst_surface, wine_dbgstr_rect(dst_rect_in), src_surface, wine_dbgstr_rect(src_rect_in),
@@ -5327,6 +5343,10 @@ HRESULT CDECL wined3d_surface_blt(struct wined3d_surface *dst_surface, const REC
                 color_key = &src_surface->container->async.src_blt_color_key;
                 blit_op = WINED3D_BLIT_OP_COLOR_BLIT_CKEY;
             }
+            else if (flags & WINEDDBLT_ALPHATEST)
+            {
+                blit_op = WINED3D_BLIT_OP_COLOR_BLIT_ALPHATEST;
+            }
             else if ((src_surface->locations & WINED3D_LOCATION_SYSMEM)
                     && !(dst_surface->locations & WINED3D_LOCATION_SYSMEM))
             {
@@ -5398,7 +5418,7 @@ HRESULT CDECL wined3d_surface_blt(struct wined3d_surface *dst_surface, const REC
                     &dst_rect, dst_surface->resource.usage, dst_surface->resource.pool, dst_surface->resource.format);
             if (blitter)
             {
-                blitter->blit_surface(device, filter, src_surface, &src_rect, dst_surface, &dst_rect, color_key);
+                blitter->blit_surface(device, blit_op, filter, src_surface, &src_rect, dst_surface, &dst_rect, color_key);
                 return WINED3D_OK;
             }
         }
@@ -5488,6 +5508,10 @@ static HRESULT surface_init(struct wined3d_surface *surface, struct wined3d_text
         surface->resource.access_flags |= WINED3D_RESOURCE_ACCESS_CPU;
 
 #ifdef VBOX_WITH_WINE_FIXES
+    /*
+     * JH: this is only workaround to stop some games crashing,
+     *     not solution!
+     */
 		surface->resource.map_binding = WINED3D_LOCATION_SYSMEM;
 #endif
     surface->texture_target = target;

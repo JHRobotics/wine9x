@@ -3032,11 +3032,7 @@ void context_stream_info_from_declaration(struct wined3d_context *context,
                 stream_info->elements[idx].divisor = 0;
             }
 
-#ifndef VERTEX_ARRAY_BGRA_BROKEN
-            if (!context->gl_info->supported[ARB_VERTEX_ARRAY_BGRA]
-#else
-            if(1
-#endif
+            if ((wined3d_settings.vertex_array_brga_broken || !context->gl_info->supported[ARB_VERTEX_ARRAY_BGRA])
                     && element->format->id == WINED3DFMT_B8G8R8A8_UNORM)
             {
                 stream_info->swizzle_map |= 1u << idx;
@@ -3120,12 +3116,15 @@ static void context_update_stream_info(struct wined3d_context *context, const st
     else
     {
         WORD slow_mask = -!d3d_info->ffp_generic_attributes & (1u << WINED3D_FFP_PSIZE);
-#ifndef VERTEX_ARRAY_BGRA_BROKEN
-        slow_mask |= -!gl_info->supported[ARB_VERTEX_ARRAY_BGRA]
-#else
-        slow_mask |= -!FALSE
-#endif
-                & ((1u << WINED3D_FFP_DIFFUSE) | (1u << WINED3D_FFP_SPECULAR));
+
+        if(wined3d_settings.vertex_array_brga_broken)
+        {
+          slow_mask |= -!FALSE & ((1u << WINED3D_FFP_DIFFUSE) | (1u << WINED3D_FFP_SPECULAR));
+        }
+        else
+        {
+        	slow_mask |= -!gl_info->supported[ARB_VERTEX_ARRAY_BGRA] & ((1u << WINED3D_FFP_DIFFUSE) | (1u << WINED3D_FFP_SPECULAR));
+        }       
 
         if (((stream_info->position_transformed && !d3d_info->xyzrhw)
                 || (stream_info->use_map & slow_mask)) && !stream_info->all_vbo)

@@ -283,10 +283,12 @@ struct wined3d_settings
     int allow_multisampling;
     BOOL strict_draw_ordering;
     BOOL always_offscreen;
+    BOOL check_float_constants;
     unsigned int max_sm_vs;
     unsigned int max_sm_gs;
     unsigned int max_sm_ps;
     BOOL no_3d;
+    BOOL vertex_array_brga_broken;
     BOOL force32bit;
 };
 
@@ -1371,6 +1373,7 @@ HRESULT compile_state_table(struct StateEntry *StateTable, APPLYSTATEFUNC **dev_
 enum wined3d_blit_op
 {
     WINED3D_BLIT_OP_COLOR_BLIT,
+    WINED3D_BLIT_OP_COLOR_BLIT_ALPHATEST,
     WINED3D_BLIT_OP_COLOR_BLIT_CKEY,
     WINED3D_BLIT_OP_COLOR_FILL,
     WINED3D_BLIT_OP_DEPTH_FILL,
@@ -1394,7 +1397,7 @@ struct blit_shader
             const RECT *dst_rect, const struct wined3d_color *color);
     HRESULT (*depth_fill)(struct wined3d_device *device,
             struct wined3d_surface *surface, const RECT *rect, float depth);
-    void (*blit_surface)(struct wined3d_device *device, DWORD filter,
+    void (*blit_surface)(struct wined3d_device *device, enum wined3d_blit_op op, DWORD filter,
             struct wined3d_surface *src_surface, const RECT *src_rect,
             struct wined3d_surface *dst_surface, const RECT *dst_rect,
             const struct wined3d_color_key *color_key);
@@ -1491,6 +1494,7 @@ enum wined3d_pci_vendor
     HW_VENDOR_SOFTWARE              = 0x0000,
     HW_VENDOR_AMD                   = 0x1002,
     HW_VENDOR_NVIDIA                = 0x10de,
+    HW_VENDOR_3DFX                  = 0x121A,
     HW_VENDOR_VMWARE                = 0x15ad,
     HW_VENDOR_INTEL                 = 0x8086,
     HW_VENDOR_CHROMIUM              = 0x80EE,
@@ -1670,6 +1674,9 @@ enum wined3d_pci_device
     CARD_INTEL_HWM                  = 0x0416,
     
     CARD_CHROMIUM                   = 0xBEEF,
+    
+    CARD_VOODOO_BANSHEE              = 0x0003,
+    
 };
 
 struct wined3d_fbo_ops
