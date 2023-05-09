@@ -269,7 +269,7 @@ static inline float float_24_to_32(DWORD in)
 #define PCI_DEVICE_NONE 0xffff /* e.g. 0x14f for a Geforce6200 */
 
 /* NOTE: When adding fields to this structure, make sure to update the default
- * values in wined3d_main.c as well. */
+ * values in wined3d_main.c as well (line circa 80). */
 struct wined3d_settings
 {
     DWORD max_gl_version;
@@ -283,13 +283,13 @@ struct wined3d_settings
     int allow_multisampling;
     BOOL strict_draw_ordering;
     BOOL always_offscreen;
-    BOOL check_float_constants;
     unsigned int max_sm_vs;
     unsigned int max_sm_gs;
     unsigned int max_sm_ps;
     BOOL no_3d;
-    BOOL vertex_array_brga_broken;
     BOOL force32bit;
+    BOOL vertex_array_brga_broken;
+   	BOOL check_float_constants;
 };
 
 extern struct wined3d_settings wined3d_settings DECLSPEC_HIDDEN;

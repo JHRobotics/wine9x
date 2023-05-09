@@ -2456,8 +2456,6 @@ static enum wined3d_pci_device wined3d_guess_card(const struct shader_caps *shad
     enum wined3d_d3d_level d3d_level = d3d_level_from_caps(shader_caps, fragment_caps, glsl_version);
     enum wined3d_pci_device device;
     
-    wined3d_settings.force32bit = FALSE;
-
     for (i = 0; i < (sizeof(card_vendor_table) / sizeof(*card_vendor_table)); ++i)
     {
         if (card_vendor_table[i].card_vendor != *card_vendor)

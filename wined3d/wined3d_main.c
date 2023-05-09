@@ -92,6 +92,9 @@ struct wined3d_settings wined3d_settings =
     ~0U,            /* No GS shader model limit by default. */
     ~0U,            /* No PS shader model limit by default. */
     FALSE,          /* 3D support enabled by default. */
+    FALSE,          /* allway 32bit rendering disabled by default */
+    FALSE,          /* VERTEX_ARRAY_BRGA is OK on most cases */
+    FALSE,          /* CheckFloatConstants disabled by default */
 };
 
 struct wined3d * CDECL wined3d_create(DWORD flags)
