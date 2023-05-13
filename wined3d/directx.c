@@ -4068,6 +4068,58 @@ static BOOL isWindows95()
 	return FALSE;
 }
 
+
+/*
+ *  Struct DEVMODEA for W95, problem is, if this struct is larger,
+ * leeds to some buffer overflow on Windows 95!
+ */
+typedef struct _devicemodeA95 {
+  BYTE dmDeviceName[CCHDEVICENAME];
+  WORD dmSpecVersion;
+  WORD dmDriverVersion;
+  WORD dmSize;
+  WORD dmDriverExtra;
+  DWORD dmFields;
+  __C89_NAMELESS union {
+    __C89_NAMELESS struct {
+	    short dmOrientation;
+	    short dmPaperSize;
+	    short dmPaperLength;
+	    short dmPaperWidth;
+	    short dmScale;
+	    short dmCopies;
+	    short dmDefaultSource;
+	    short dmPrintQuality;
+    };
+    struct {
+      POINTL dmPosition;
+      DWORD dmDisplayOrientation;
+      DWORD dmDisplayFixedOutput;
+    };
+  };
+  short dmColor;
+  short dmDuplex;
+  short dmYResolution;
+  short dmTTOption;
+  short dmCollate;
+  BYTE dmFormName[CCHFORMNAME];
+  WORD dmLogPixels;
+  DWORD dmBitsPerPel;
+  DWORD dmPelsWidth;
+  DWORD dmPelsHeight;
+  __C89_NAMELESS union {
+      DWORD dmDisplayFlags;
+      DWORD dmNup;
+  };
+  DWORD dmDisplayFrequency;
+  DWORD dmICMMethod;
+  DWORD dmICMIntent;
+  DWORD dmMediaType;
+  DWORD dmDitherType;
+	DWORD dmReserved1;
+	DWORD dmReserved2;
+} DEVMODEA95;
+
 /**
  * Wrapper for Windows 95, even 95 has EnumDisplaySettingsA it's returning
  * nonsenses.
@@ -4076,11 +4128,36 @@ static BOOL isWindows95()
  *   http://www.pseudonymz.com/homepage/OpenGLGameDev/suppwin.html
  *   http://www.pseudonymz.com/homepage/OpenGLGameDev/devcaps.txt
  *
- */
+ */ 
 BOOL EnumDisplaySettingsA95(LPCSTR lpszDeviceName, DWORD iModeNum, DEVMODEA *lpDevMode)
 {
 	if(isWindows95())
 	{
+		if(iModeNum == ENUM_REGISTRY_SETTINGS)
+		{
+			if(lpDevMode)
+			{
+				DWORD devModeSize = lpDevMode->dmSize;
+				DEVMODEA devmodetmp = {};
+				devmodetmp.dmSize = sizeof(DEVMODEA95);
+				
+				memset(lpDevMode, 0, devModeSize);
+				lpDevMode->dmSize = devModeSize;
+				
+				if(EnumDisplaySettingsA(NULL, ENUM_REGISTRY_SETTINGS, &devmodetmp))
+				{
+					lpDevMode->dmBitsPerPel = devmodetmp.dmBitsPerPel;
+					lpDevMode->dmPelsWidth  = devmodetmp.dmPelsWidth;
+					lpDevMode->dmPelsHeight = devmodetmp.dmPelsHeight;
+					
+					return TRUE;
+				}
+				return FALSE;
+			}
+			
+			return TRUE;
+		}
+		
 		if(!(iModeNum == ENUM_CURRENT_SETTINGS || iModeNum == ENUM_REGISTRY_SETTINGS || iModeNum == 0))
 		{
 			return FALSE;
@@ -4349,6 +4426,11 @@ LONG WINAPI ChangeDisplaySettingsExA95(LPCSTR lpszDeviceName, DEVMODEA *lpDevMod
 	}
 	
 	/* Windows 95 has only one display */
+	if(lpDevMode->dmSize > sizeof(DEVMODEA95))
+	{
+		lpDevMode->dmSize = sizeof(DEVMODEA95);
+	}
+	
 	return ChangeDisplaySettingsA(lpDevMode, dwflags);
 }
 

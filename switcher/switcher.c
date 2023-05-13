@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdarg.h>
 #include <windows.h>
 #include <tlhelp32.h>
 #include "nocrt.h"
@@ -22,8 +23,46 @@ ddlib_t *ddraw_active_lib = NULL;
 #define SWITCHER_MAGIC 0x4312BEC4
 #define TEST_MAGIC() (switcher_ctx.magic == SWITCHER_MAGIC)
 
+#define FILE_LOG "C:\\ddswitch.log"
+
 #ifdef DEBUG
-#define DBG_printf printf
+//#define DBG_printf printf
+HANDLE log_mutex = INVALID_HANDLE_VALUE;
+
+void DBG_printf(const char *format, ...)
+{
+	va_list vl;
+	static char modulename[MAX_PATH+1];
+	
+	if(log_mutex != INVALID_HANDLE_VALUE)
+	{
+		WaitForSingleObject(log_mutex, INFINITE);
+	}
+	
+# ifdef FILE_LOG
+	FILE *fa = fopen(FILE_LOG, "ab");
+	if(fa)
+	{
+		if(GetModuleFileNameA(NULL, modulename, MAX_PATH) != 0)
+		{
+			fprintf(fa, "%s: ", modulename);
+		}
+		
+		va_start(vl,format);
+		vfprintf(fa, format, vl);
+		va_end(vl);
+		fclose(fa);
+	}
+# else
+ vprintf(format, vl);
+# endif
+	
+	if(log_mutex != INVALID_HANDLE_VALUE)
+	{
+		ReleaseMutex(log_mutex);
+	}
+	
+}
 #else
 #define DBG_printf(format, ...)
 #endif
@@ -419,18 +458,18 @@ static void dump_switcher()
 	int t;
 	for(i = 0; i < switcher_ctx.ddlinks_cnt; i++)
 	{
-		printf("%d\n", i);
-		printf("--------\n");
-		printf("%s\n%s\n", switcher_ctx.ddlinks[i].name, switcher_ctx.ddlinks[i].dllname);
-		printf("system: %d\n", switcher_ctx.ddlinks[i].system);
-		printf("========\n");
+		DBG_printf("%d\n", i);
+		DBG_printf("--------\n");
+		DBG_printf("%s\n%s\n", switcher_ctx.ddlinks[i].name, switcher_ctx.ddlinks[i].dllname);
+		DBG_printf("system: %d\n", switcher_ctx.ddlinks[i].system);
+		DBG_printf("========\n");
 	}
 	
 	t = ChooseLib(0);
-	printf("Default: %d\n", t);
+	DBG_printf("Default: %d\n", t);
 	
 	t = ChooseLib(1);
-	printf("Default system: %d\n", t);
+	DBG_printf("Default system: %d\n", t);
 }
 
 
@@ -439,14 +478,15 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
   switch (reason)
   {
     case DLL_PROCESS_ATTACH:
-    	printf("Switcher DLL: DLL_PROCESS_ATTACH\n");
+    	#ifdef DEBUG
+    	log_mutex = CreateMutexA(NULL, FALSE, "global\\ddswmux");
+    	#endif
     	InitSwitcher(inst);
     	#ifdef DEBUG
     	dump_switcher();
     	#endif
     	break;
     case DLL_PROCESS_DETACH:
-    	printf("Switcher DLL: DLL_PROCESS_DETACH\n");
     	break;
    }
 	

@@ -605,7 +605,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
         case DLL_PROCESS_DETACH:
         	  wine_debug_logs_close();
             if (!reserved)
-            {
+            {           	
             	return wined3d_dll_destroy(inst);
             }
             break;
