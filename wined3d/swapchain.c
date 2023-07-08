@@ -1148,7 +1148,7 @@ HDC swapchain_get_backup_dc(struct wined3d_swapchain *swapchain)
 		    wc.lpfnWndProc          = DefWindowProcA;
 		    wc.cbClsExtra           = 0;
 		    wc.cbWndExtra           = 0;
-		    wc.hInstance            = wine3d3_gethInstDLL();
+		    wc.hInstance            = wined3d_gethInstDLL();
 		    wc.hIcon                = LoadIconA(NULL, (const char *)IDI_WINLOGO);
 		    wc.hCursor              = LoadCursorA(NULL, (const char *)IDC_ARROW);
 		    wc.hbrBackground        = NULL;
@@ -1168,7 +1168,7 @@ HDC swapchain_get_backup_dc(struct wined3d_swapchain *swapchain)
 				}*/
 
         if (!(swapchain->backup_wnd = CreateWindowA(WINED3D_OPENGL_WINDOW_CLASS_NAME, "WineD3D fake window",
-                WS_OVERLAPPEDWINDOW, 10, 10, 10, 10, NULL, NULL, wine3d3_gethInstDLL(), NULL)))
+                WS_OVERLAPPEDWINDOW, 10, 10, 10, 10, NULL, NULL, wined3d_gethInstDLL(), NULL)))
         {
             ERR("Failed to create a window.\n");
             return NULL;

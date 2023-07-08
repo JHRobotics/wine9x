@@ -44,10 +44,12 @@ static const char * const debug_classes[] = { "fixme", "err", "warn", "trace" };
 
 #define MAX_DEBUG_OPTIONS 256
 
+#ifndef WINE_SILENT
 /* output logs to file */
-//#define LOG_FILE
+#define LOG_FILE
 /* log TRACE messages to */
 //#define LOG_TRACE
+#endif
 
 /*typedef DECLCALLBACKTYPE(void, FNVBOXWINELOGBACKDOOR, (char* pcszStr));
 typedef FNVBOXWINELOGBACKDOOR *PFNVBOXWINELOGBACKDOOR;

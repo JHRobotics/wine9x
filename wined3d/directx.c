@@ -355,7 +355,7 @@ static BOOL wined3d_caps_gl_ctx_create(struct wined3d_adapter *adapter, struct w
     wc.lpfnWndProc          = DefWindowProcA;
     wc.cbClsExtra           = 0;
     wc.cbWndExtra           = 0;
-    wc.hInstance            = wine3d3_gethInstDLL();
+    wc.hInstance            = wined3d_gethInstDLL();
     wc.hIcon                = LoadIconA(NULL, (const char *)IDI_WINLOGO);
     wc.hCursor              = LoadCursorA(NULL, (const char *)IDC_ARROW);
     wc.hbrBackground        = NULL;
@@ -381,8 +381,8 @@ static BOOL wined3d_caps_gl_ctx_create(struct wined3d_adapter *adapter, struct w
 
     /* We need a fake window as a hdc retrieved using GetDC(0) can't be used for much GL purposes. */
     ctx->wnd = CreateWindowA(WINED3D_OPENGL_WINDOW_CLASS_NAME, "WineD3D fake window",
-            WS_OVERLAPPEDWINDOW, 10, 10, 10, 10, NULL, NULL, wine3d3_gethInstDLL(), NULL);
-            //WS_OVERLAPPEDWINDOW|WS_VISIBLE, 0,0,640,480,0,0, wine3d3_gethInstDLL(), 0);
+            WS_OVERLAPPEDWINDOW, 10, 10, 10, 10, NULL, NULL, wined3d_gethInstDLL(), NULL);
+            //WS_OVERLAPPEDWINDOW|WS_VISIBLE, 0,0,640,480,0,0, wined3d_gethInstDLL(), 0);
     if (!ctx->wnd)
     {
         ERR("Failed to create a window: %d\n", GetLastError());
@@ -4172,6 +4172,7 @@ BOOL EnumDisplaySettingsA95(LPCSTR lpszDeviceName, DWORD iModeNum, DEVMODEA *lpD
 				lpDevMode->dmBitsPerPel = GetDeviceCaps(hdc, PLANES) * GetDeviceCaps(hdc, BITSPIXEL);
 				lpDevMode->dmPelsWidth  = GetDeviceCaps(hdc, HORZRES);
 				lpDevMode->dmPelsHeight = GetDeviceCaps(hdc, VERTRES);
+				lpDevMode->dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
 				ReleaseDC(hDesktop, hdc);
 				
 				return TRUE;

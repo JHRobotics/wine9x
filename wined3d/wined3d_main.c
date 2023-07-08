@@ -143,9 +143,39 @@ static DWORD get_config_key_dword(HKEY defkey, HKEY appkey, const char *name, DW
 
 static HINSTANCE act_hInstDLL = NULL;
 
-HINSTANCE wine3d3_gethInstDLL()
+HINSTANCE wined3d_gethInstDLL()
 {
 	return act_hInstDLL;
+}
+
+static DEVMODEA init_display_state;
+
+static void wined3d_save_display_state()
+{
+	memset(&init_display_state, 0, sizeof(init_display_state));
+	EnumDisplaySettingsA95(NULL, ENUM_CURRENT_SETTINGS, &init_display_state);
+}
+
+static void wined3d_restore_display_state()
+{
+	if(init_display_state.dmPelsWidth != 0 && init_display_state.dmPelsHeight != 0)
+	{
+		DEVMODEA act_display_state;
+		
+		if(EnumDisplaySettingsA95(NULL, ENUM_CURRENT_SETTINGS, &act_display_state))
+		{
+			if(act_display_state.dmPelsWidth == init_display_state.dmPelsWidth &&
+				act_display_state.dmPelsHeight == init_display_state.dmPelsHeight &&
+				act_display_state.dmBitsPerPel == init_display_state.dmBitsPerPel
+				)
+			{
+				/* mode match */
+				return;
+			}
+		}
+		
+		ChangeDisplaySettingsExA95(NULL, &init_display_state, NULL, CDS_FULLSCREEN, NULL);	
+	}
 }
 
 static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
@@ -158,6 +188,8 @@ static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
     DWORD len, tmpvalue;
     WNDCLASSA wc;
     int r;
+    
+    wined3d_save_display_state();
 
     wined3d_context_tls_idx = TlsAlloc();
     if (wined3d_context_tls_idx == TLS_OUT_OF_INDEXES)
@@ -384,6 +416,8 @@ static BOOL wined3d_dll_destroy(HINSTANCE hInstDLL)
 {
     DWORD wined3d_context_tls_idx = context_get_tls_idx();
     unsigned int i;
+    
+    wined3d_restore_display_state();
 
     if (!TlsFree(wined3d_context_tls_idx))
     {

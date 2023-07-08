@@ -3415,6 +3415,9 @@ struct wined3d_context *context_find_create(struct wined3d_device *device,
 
 #define MAKEDWORD_VERSION(maj, min) (((maj & 0xffffu) << 16) | (min & 0xffffu))
 
-HINSTANCE wine3d3_gethInstDLL();
+HINSTANCE wined3d_gethInstDLL();
+
+LONG WINAPI ChangeDisplaySettingsExA95(LPCSTR lpszDeviceName, DEVMODEA *lpDevMode, HWND hwnd, DWORD dwflags, LPVOID lParam);
+BOOL EnumDisplaySettingsA95(LPCSTR lpszDeviceName, DWORD iModeNum, DEVMODEA *lpDevMode);
 
 #endif
