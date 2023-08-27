@@ -38,6 +38,12 @@
 #include <excpt.h>
 #endif
 
+#ifdef HAVE_CRTEX
+#include <lockex.h>
+int crt_sse2_is_safe();
+void crt_enable_sse2();
+#endif
+
 WINE_DEFAULT_DEBUG_CHANNEL(ddraw);
 
 static struct list global_ddraw_list = LIST_INIT(global_ddraw_list);
@@ -888,6 +894,13 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
     {
     case DLL_PROCESS_ATTACH:
     {
+#ifdef HAVE_CRTEX
+        		crt_locks_init(0);
+        	  if(crt_sse2_is_safe())
+        	  {
+        	  	crt_enable_sse2();
+        	  }
+#endif
         static HMODULE ddraw_self;
         HKEY hkey = 0;
         WNDCLASSA wc;

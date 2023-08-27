@@ -30,6 +30,11 @@
 
 #include <stdio.h>
 
+#ifdef HAVE_CRTEX
+#include <lockex.h>
+#endif
+
+
 WINE_DEFAULT_DEBUG_CHANNEL(d3d);
 WINE_DECLARE_DEBUG_CHANNEL(winediag);
 
@@ -625,6 +630,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
     switch (reason)
     {
         case DLL_PROCESS_ATTACH:
+#ifdef HAVE_CRTEX
+        		crt_locks_init(0);
+#endif
         	  wine_debug_logs_init("wined3d.log");
 #ifdef HAVE_CRTEX
         	  if(crt_sse2_is_safe())

@@ -133,7 +133,7 @@ else
     CFLAGS += -flto
   endif
 
-  CFLAGS += -Wno-write-strings -Wno-cast-qual -Imingw -Iinclude -Iinclude/wine -Icompact -D_WIN32 -DWIN32 -D__WINESRC__ \
+  CFLAGS += -Wno-write-strings -Wno-cast-qual -Imingw -Iinclude -Iinclude/wine -Icompact -Ipthread9x/include -D_WIN32 -DWIN32 -D__WINESRC__ \
     -DUSE_WIN32_OPENGL -DWINE_NOWINSOCK  -DHAVE_CRTEX \
     -DWINE_UNICODE_API="" -DDLLDIR=\"\" -DBINDIR=\"\" -DLIB_TO_BINDIR=\"\" \
     -DLIB_TO_DLLDIR=\"\" -DBIN_TO_DLLDIR=\"\" -DLIB_TO_DATADIR=\"\" -DBIN_TO_DATADIR=\"\" -DWINVER=0x0400 \

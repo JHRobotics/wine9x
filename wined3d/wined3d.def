@@ -300,5 +300,8 @@ EXPORTS
   strndup
   strtoull
   strtoll
+  crt_locks_init
+  crt_sse2_is_safe
+  crt_enable_sse2
 
 
