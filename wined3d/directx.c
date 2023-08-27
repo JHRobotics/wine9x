@@ -2464,11 +2464,7 @@ static enum wined3d_pci_device wined3d_guess_card(const struct shader_caps *shad
         TRACE("Applying card selector \"%s\".\n", card_vendor_table[i].description);
         device = select_card_handler(card_vendor_table[i].gl_vendor_selection,
                 card_vendor_table[i].gl_vendor_count, *gl_vendor, gl_renderer);
-        if (device == CARD_VMWARE_SVGA3D)
-        {
-            //wined3d_settings.force32bit = TRUE;
-        }
-        
+
         if (device != PCI_DEVICE_NONE)
             return device;
 
@@ -4010,8 +4006,17 @@ static BOOL wined3d_adapter_init_gl_caps(struct wined3d_adapter *adapter)
     
     if(strstr(gl_renderer_str, "SVGA3D"))
     {
-    	gl_info->supported[ARB_DRAW_ELEMENTS_BASE_VERTEX] = FALSE;
-    	wined3d_settings.vertex_array_brga_broken = TRUE;
+    	if(gl_version <= MAKEDWORD_VERSION(2, 1))
+    	{
+    		/* in vGPU gen. 9 not working vertex extension */
+    		gl_info->supported[ARB_DRAW_ELEMENTS_BASE_VERTEX] = FALSE;
+    		wined3d_settings.vertex_array_brga_broken = TRUE;
+    	}
+    	else
+    	{
+    		/* vGPU gen. 10 supporting near only 32 surfaces */
+    		//wined3d_settings.force32bit = TRUE;
+    	}
     }
 
     return TRUE;
