@@ -2571,9 +2571,12 @@ HRESULT CDECL wined3d_surface_map(struct wined3d_surface *surface,
 
         if (surface->resource.device->d3d_initialized)
             context2 = context_acquire(surface->resource.device, NULL);
-        surface_load_location(surface, context2, surface->resource.map_binding);
+        
         if (context2)
+        {
+            surface_load_location(surface, context2, surface->resource.map_binding);
             context_release(context2);
+        }
     }
 
     if (!(flags & (WINED3D_MAP_NO_DIRTY_UPDATE | WINED3D_MAP_READONLY)))
@@ -4053,8 +4056,10 @@ static HRESULT surface_load_texture(struct wined3d_surface *surface,
     {
         WARN("Trying to load a texture from sysmem, but no simple location is valid.\n");
         /* Lets hope we get it from somewhere... */
-        surface_prepare_system_memory(surface);
-        surface_load_location(surface, context, WINED3D_LOCATION_SYSMEM);
+        //surface_prepare_system_memory(surface);
+        //surface_load_location(surface, context, WINED3D_LOCATION_SYSMEM);
+        // JHFIX: doesn't work, only causes stack overflow
+        return WINED3DERR_INVALIDCALL;
     }
 
     wined3d_texture_prepare_texture(texture, context, srgb);
