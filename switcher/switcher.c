@@ -243,6 +243,32 @@ static void InitSwitcher(HMODULE inst)
 	          break;
 	      }
 			}
+			else
+			{
+				/* read global preference */
+				lResult = RegQueryValueExA(hKey, "global", NULL, &type, regbuff, &size);
+		    if(lResult == ERROR_SUCCESS)
+		    {
+		      switch(type)
+		      {
+		        case REG_SZ:
+		        case REG_MULTI_SZ:
+		        case REG_EXPAND_SZ:
+		        	if(stricmp(regbuff, "ddraw.dll") == 0 ||
+		        		 stricmp(regbuff, "ddsys.dll") == 0 ||
+		        		 stricmp(regbuff, "system") == 0 ||
+		        		 stricmp(regbuff, "ddraw") == 0)
+		        	{
+		        		syspmul = 10;
+		        	}
+		        	else
+		        	{
+		        		ctx_add("registry", regbuff, 60, 0, 0);
+		        	}
+		          break;
+		      }
+				}
+			}
 		}
 		
 		RegCloseKey(hKey);
