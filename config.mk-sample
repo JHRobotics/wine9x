@@ -42,7 +42,7 @@ SPEED=1
 
 # enable link-time optimalization, linking with it is super slow, and build is broken anyway (!)
 # DON'T use this yet!
-#LTO=1
+#LTO=auto
 
 # Link to wined3d.lib (libwined3d.a) instead of wined3d.dll
 # BUT if program using more DX9 interfaces (for example ddraw for video and

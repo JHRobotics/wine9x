@@ -238,7 +238,7 @@ static void InitSwitcher(HMODULE inst)
 	        	}
 	        	else
 	        	{
-	        		ctx_add("registry", regbuff, 60, 0, 0);
+	        		ctx_add("registry", regbuff, 70, 0, 0);
 	        	}
 	          break;
 	      }
@@ -412,7 +412,9 @@ static BOOL CallLoop(BYTE *returnaddress)
 			{
 				/* WARNING: check for module name case insensitive! */
 				if(stricmp(modentry.szModule, "opengl32.dll") == 0 ||
-					stricmp(modentry.szModule, "mesa3d.dll") == 0)
+					stricmp(modentry.szModule, "mesa3d.dll") == 0 ||
+					stricmp(modentry.szModule, "vmwsgl32.dll") == 0
+				)
 				{
 					DBG_printf("backfire <- %s\n", modentry.szModule);
 					

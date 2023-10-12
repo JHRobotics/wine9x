@@ -130,7 +130,7 @@ else
   endif
   
   ifdef LTO
-    CFLAGS += -flto
+    CFLAGS += -flto=$(LTO)
   endif
 
   CFLAGS += -Wno-write-strings -Wno-cast-qual -Imingw -Iinclude -Iinclude/wine -Icompact -Ipthread9x/include -D_WIN32 -DWIN32 -D__WINESRC__ \
@@ -167,7 +167,7 @@ else
     RESDEF  += -DWINE9X_BUILD=$(VERSION_BUILD)
   endif
 
-  WINED3D_LIBS  = pthread9x/crtfix$(OBJ) -static -L. -Lpthread9x -static -lpthread -lgdi32 -lopengl32
+  WINED3D_LIBS  = pthread9x/crtfix$(OBJ) -static-libgcc -L. -Lpthread9x -lpthread -lgdi32 -lopengl32
   SWITCHER_LIBS = -ladvapi32 -lkernel32 -luser32
   
   WINELIB_DEPS = pthread9x/crtfix$(OBJ) pthread9x/$(LIBPREFIX)pthread$(LIBSUFFIX)
@@ -178,11 +178,11 @@ else
   LIBPREFIX := lib
 
   ifdef WINED3D_STATIC
-    DX_LIBS = -static -L. -lwined3d_static -lgdi32 -lopengl32
+    DX_LIBS = -static-libgcc -L. -lwined3d_static -lgdi32 -lopengl32
     CFLAGS += -DWINED3D_STATIC
     WINED3D_LIB_NAME = $(LIBPREFIX)wined3d_static$(LIBSUFFIX)
   else
-    DX_LIBS = -static -L. pthread9x/crtfix$(OBJ) -lwined3d -lgdi32
+    DX_LIBS = -static-libgcc -L. pthread9x/crtfix$(OBJ) -lwined3d -lgdi32
     WINED3D_LIB_NAME = wined3d.dll
   endif
 
