@@ -53,6 +53,15 @@ struct wined3d_wndproc_table
     unsigned int size;
 };
 
+#define DLL_VALID_VALUE 42
+
+static unsigned int DLLValid = 0;
+
+
+#ifdef USE_HOOKS
+HHOOK wine_hook = NULL;
+#endif
+
 static struct wined3d_wndproc_table wndproc_table;
 
 static CRITICAL_SECTION wined3d_cs;
@@ -183,6 +192,8 @@ static void wined3d_restore_display_state()
 	}
 }
 
+static LRESULT CALLBACK wine_hook_proc(int nCode, WPARAM wParam, LPARAM lParam);
+
 static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
 {
     DWORD wined3d_context_tls_idx;
@@ -233,6 +244,10 @@ static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
     act_hInstDLL = hInstDLL;
 
     DisableThreadLibraryCalls(hInstDLL);
+
+#ifdef USE_HOOKS
+    wine_hook = SetWindowsHookExA(WH_CALLWNDPROC, wine_hook_proc, NULL, GetCurrentThreadId());
+#endif
     
     for(r = 0; r < 2; r++) /* r == 0: original wine registry path; r == 1: wine9x registry path */
     {
@@ -412,6 +427,8 @@ static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
     InitializeCriticalSection(&wined3d_wndproc_cs);
     InitializeCriticalSection(&wined3d_cs);
     
+    DLLValid = DLL_VALID_VALUE;
+    
 		TRACE("wined3d_dll_init success\n");
 
     return TRUE;
@@ -421,6 +438,14 @@ static BOOL wined3d_dll_destroy(HINSTANCE hInstDLL)
 {
     DWORD wined3d_context_tls_idx = context_get_tls_idx();
     unsigned int i;
+    
+#ifdef USE_HOOKS
+    if(wine_hook)
+    {
+    	UnhookWindowsHookEx(wine_hook);
+    	wine_hook = NULL;
+    }
+#endif
     
     wined3d_restore_display_state();
 
@@ -490,12 +515,15 @@ static struct wined3d_wndproc *wined3d_find_wndproc(HWND window)
     return NULL;
 }
 
+#ifndef USE_HOOKS
 static LRESULT CALLBACK wined3d_wndproc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 {
     struct wined3d_wndproc *entry;
     struct wined3d_device *device;
     BOOL unicode;
     WNDPROC proc;
+    
+    if(DLLValid != DLL_VALID_VALUE) return DefWindowProcA(window, message, wparam, lparam);
 
     wined3d_wndproc_mutex_lock();
     entry = wined3d_find_wndproc(window);
@@ -506,7 +534,7 @@ static LRESULT CALLBACK wined3d_wndproc(HWND window, UINT message, WPARAM wparam
         ERR("Window %p is not registered with wined3d.\n", window);
         return DefWindowProcA(window, message, wparam, lparam);
     }
-
+    
     device = entry->device;
     unicode = entry->unicode;
     proc = entry->proc;
@@ -514,10 +542,48 @@ static LRESULT CALLBACK wined3d_wndproc(HWND window, UINT message, WPARAM wparam
 
     if (device)
         return device_process_message(device, window, unicode, message, wparam, lparam, proc);
+
+    if (proc == NULL || proc == wined3d_wndproc)
+    	return DefWindowProc(window, message, wparam, lparam); 
+
     if (unicode)
         return CallWindowProcW(proc, window, message, wparam, lparam);
     return CallWindowProcA(proc, window, message, wparam, lparam);
 }
+#endif
+
+#ifdef USE_HOOKS
+static LRESULT CALLBACK wine_hook_proc(int nCode, WPARAM wParam, LPARAM lParam)
+{
+	PCWPSTRUCT pParams = (PCWPSTRUCT)lParam;
+	struct wined3d_wndproc *entry;
+	struct wined3d_device *device;
+	BOOL unicode;
+	WNDPROC proc;
+    
+	if (nCode < 0 || DLLValid != DLL_VALID_VALUE)
+		return CallNextHookEx(NULL, nCode, wParam, lParam);
+
+	wined3d_wndproc_mutex_lock();
+	entry = wined3d_find_wndproc(pParams->hwnd);
+
+	if (entry)
+	{
+  	device = entry->device;
+    unicode = entry->unicode;
+    proc = entry->proc;
+    
+    if(device)
+    {
+    	device_process_message(device, pParams->hwnd, unicode, pParams->message, pParams->wParam, pParams->lParam, proc);
+    }
+	}
+	
+	wined3d_wndproc_mutex_unlock();
+	
+	return CallNextHookEx(NULL, nCode, wParam, lParam);
+}
+#endif
 
 BOOL wined3d_register_window(HWND window, struct wined3d_device *device)
 {
@@ -557,10 +623,12 @@ BOOL wined3d_register_window(HWND window, struct wined3d_device *device)
     /* Set a window proc that matches the window. Some applications (e.g. NoX)
      * replace the window proc after we've set ours, and expect to be able to
      * call the previous one (ours) directly, without using CallWindowProc(). */
+#ifndef USE_HOOKS
     if (entry->unicode)
         entry->proc = (WNDPROC)SetWindowLongPtrW(window, GWLP_WNDPROC, (LONG_PTR)wined3d_wndproc);
     else
         entry->proc = (WNDPROC)SetWindowLongPtrA(window, GWLP_WNDPROC, (LONG_PTR)wined3d_wndproc);
+#endif
     entry->device = device;
 
     wined3d_wndproc_mutex_unlock();
@@ -578,10 +646,11 @@ void wined3d_unregister_window(HWND window)
     if (!(entry = wined3d_find_wndproc(window)))
     {
         wined3d_wndproc_mutex_unlock();
-        ERR("Window %p is not registered with wined3d.\n", window);
+        WARN("Window %p is not registered with wined3d.\n", window);
         return;
     }
 
+#ifndef USE_HOOKS
     if (entry->unicode)
     {
         proc = GetWindowLongPtrW(window, GWLP_WNDPROC);
@@ -610,6 +679,7 @@ void wined3d_unregister_window(HWND window)
 
         SetWindowLongPtrA(window, GWLP_WNDPROC, (LONG_PTR)entry->proc);
     }
+#endif
 
     last = &wndproc_table.entries[--wndproc_table.count];
     if (entry != last) *entry = *last;
@@ -645,9 +715,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
             return wined3d_dll_init(inst);
 
         case DLL_PROCESS_DETACH:
+        	  DLLValid = -1;
         	  wine_debug_logs_close();
             if (!reserved)
-            {           	
+            {
             	return wined3d_dll_destroy(inst);
             }
             break;

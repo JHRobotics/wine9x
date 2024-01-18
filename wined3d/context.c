@@ -1736,7 +1736,7 @@ struct wined3d_context *context_create(struct wined3d_swapchain *swapchain,
     else
     {
     	//JHFIX: debug only!
-    	WARN("Create context success!\n");
+    	TRACE("Create context success!\n");
     }
 #endif
 
@@ -2959,7 +2959,7 @@ void context_stream_info_from_declaration(struct wined3d_context *context,
         const struct wined3d_vertex_declaration_element *element = &declaration->elements[i];
         const struct wined3d_stream_state *stream = &state->streams[element->input_slot];
         BOOL stride_used;
-        unsigned int idx;
+        unsigned int idx = 0;
 
         TRACE("%p Element %p (%u of %u).\n", declaration->elements,
                 element, i + 1, declaration->element_count);

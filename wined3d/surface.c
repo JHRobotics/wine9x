@@ -1152,6 +1152,7 @@ static void surface_unload(struct wined3d_resource *resource)
          * but we can't set the sysmem INDRAWABLE because when we're rendering the swapchain
          * or the depth stencil into an FBO the texture or render buffer will be removed
          * and all flags get lost */
+#if 0
         if (resource->usage & WINED3DUSAGE_DEPTHSTENCIL)
         {
             surface_validate_location(surface, WINED3D_LOCATION_DISCARDED);
@@ -1164,6 +1165,18 @@ static void surface_unload(struct wined3d_resource *resource)
             surface_validate_location(surface, WINED3D_LOCATION_SYSMEM);
             surface_invalidate_location(surface, ~WINED3D_LOCATION_SYSMEM);
         }
+#else
+        surface_prepare_system_memory(surface);
+        memset(surface->resource.heap_memory, 0, surface->resource.size);
+        surface_validate_location(surface, WINED3D_LOCATION_SYSMEM);
+        surface_invalidate_location(surface, ~WINED3D_LOCATION_SYSMEM);
+
+        /* We also get here when the ddraw swapchain is destroyed, for example
+         * for a mode switch. In this case this surface won't necessarily be
+         * an implicit surface. We have to mark it lost so that the
+         * application can restore it after the mode switch. */
+        surface->flags |= SFLAG_LOST;
+#endif
     }
     else
     {
@@ -1372,7 +1385,7 @@ static void surface_download_data(struct wined3d_surface *surface, const struct 
                     gl_format, gl_type, mem);
             checkGLcall("glGetTexImage");
         }
-
+        
         if (surface->flags & SFLAG_NONPOW2)
         {
             const BYTE *src_data;
@@ -3342,7 +3355,8 @@ void surface_translate_drawable_coords(const struct wined3d_surface *surface, HW
 
     if (surface->container->swapchain && surface->container == surface->container->swapchain->front_buffer)
     {
-#ifndef VBOX_WITH_WINE_FIXES
+#if 1
+//#ifndef VBOX_WITH_WINE_FIXES
         POINT offset = {0, 0};
         RECT windowsize;
 
@@ -3713,10 +3727,10 @@ void surface_load_ds_location(struct wined3d_surface *surface, struct wined3d_co
         return;
     }
 
-    wined3d_surface_prepare(surface, context, location);
     if (surface->locations & WINED3D_LOCATION_DISCARDED)
     {
         TRACE("Surface was discarded, no need copy data.\n");
+        wined3d_surface_prepare(surface, context, location);
         surface->locations &= ~WINED3D_LOCATION_DISCARDED;
         surface->locations |= location;
         surface->ds_current_size.cx = surface->resource.width;
@@ -4304,7 +4318,9 @@ static BOOL ffp_blit_supported(const struct wined3d_gl_info *gl_info,
                 return FALSE;
             }
         case WINED3D_BLIT_OP_COLOR_BLIT:
+#ifdef VBOX_WITH_WINE_FIX_BLIT_ALPHATEST
         case WINED3D_BLIT_OP_COLOR_BLIT_ALPHATEST:
+#endif
             if (TRACE_ON(d3d_surface) && TRACE_ON(d3d))
             {
                 TRACE("Checking support for fixup:\n");
@@ -4410,15 +4426,19 @@ static void ffp_blit_blit_surface(struct wined3d_device *device, enum wined3d_bl
     wined3d_texture_set_color_key(src_surface->container, WINED3D_CKEY_SRC_BLT, color_key);
 
     context = context_acquire(device, dst_surface);
-    
+
+#ifdef VBOX_WITH_WINE_FIX_BLIT_ALPHATEST    
     if (op == WINED3D_BLIT_OP_COLOR_BLIT_ALPHATEST)
         glEnable(GL_ALPHA_TEST);
-    
+#endif
+
     surface_blt_to_drawable(device, context, filter,
             !!color_key, src_surface, src_rect, dst_surface, dst_rect);
-            
+
+#ifdef VBOX_WITH_WINE_FIX_BLIT_ALPHATEST 
     if (op == WINED3D_BLIT_OP_COLOR_BLIT_ALPHATEST)
         glDisable(GL_ALPHA_TEST);
+#endif
             
     context_release(context);
 
@@ -5119,8 +5139,10 @@ HRESULT CDECL wined3d_surface_blt(struct wined3d_surface *dst_surface, const REC
             | WINEDDBLT_KEYSRCOVERRIDE
             | WINEDDBLT_WAIT
             | WINEDDBLT_DEPTHFILL
-            | WINEDDBLT_DONOTWAIT
-            | WINEDDBLT_ALPHATEST;
+#ifdef VBOX_WITH_WINE_FIX_BLIT_ALPHATEST
+            | WINEDDBLT_ALPHATEST
+#endif
+            | WINEDDBLT_DONOTWAIT;
 
     TRACE("dst_surface %p, dst_rect_in %s, src_surface %p, src_rect_in %s, flags %#x, fx %p, filter %s.\n",
             dst_surface, wine_dbgstr_rect(dst_rect_in), src_surface, wine_dbgstr_rect(src_rect_in),
@@ -5348,10 +5370,12 @@ HRESULT CDECL wined3d_surface_blt(struct wined3d_surface *dst_surface, const REC
                 color_key = &src_surface->container->async.src_blt_color_key;
                 blit_op = WINED3D_BLIT_OP_COLOR_BLIT_CKEY;
             }
+#ifdef VBOX_WITH_WINE_FIX_BLIT_ALPHATEST
             else if (flags & WINEDDBLT_ALPHATEST)
             {
                 blit_op = WINED3D_BLIT_OP_COLOR_BLIT_ALPHATEST;
             }
+#endif
             else if ((src_surface->locations & WINED3D_LOCATION_SYSMEM)
                     && !(dst_surface->locations & WINED3D_LOCATION_SYSMEM))
             {

@@ -173,15 +173,6 @@ HRESULT CDECL wined3d_swapchain_get_front_buffer_data(const struct wined3d_swapc
     SetRect(&src_rect, 0, 0, src_surface->resource.width, src_surface->resource.height);
     dst_rect = src_rect;
 
-#ifndef VBOX_WITH_WINE_FIXES
-     if (swapchain->desc.windowed)
-     {
-         MapWindowPoints(swapchain->win_handle, NULL, (POINT *)&dst_rect, 2);
-         FIXME("Using destination rect %s in windowed mode, this is likely wrong.\n",
-                 wine_dbgstr_rect(&dst_rect));
-     }
-#endif
-
     if (swapchain->desc.windowed)
     {
         MapWindowPoints(swapchain->win_handle, NULL, (POINT *)&dst_rect, 2);
@@ -482,7 +473,8 @@ static void swapchain_gl_present(struct wined3d_swapchain *swapchain, const RECT
 
         TRACE("Rendering the software cursor.\n");
 
-#ifndef VBOX_WITH_WINE_FIXES
+//#ifndef VBOX_WITH_WINE_FIXES
+#if 1
         if (swapchain->desc.windowed)
             MapWindowPoints(NULL, swapchain->win_handle, (POINT *)&destRect, 2);
 #endif
@@ -641,7 +633,8 @@ void x11_copy_to_screen(const struct wined3d_swapchain *swapchain, const RECT *r
      * destination window if not fullscreened. */
     if (swapchain->desc.windowed)
     {
-#ifndef VBOX_WITH_WINE_FIXES
+//#ifndef VBOX_WITH_WINE_FIXES
+#if 1
         ClientToScreen(window, &offset);
 #else
         ERR("should not be here!");

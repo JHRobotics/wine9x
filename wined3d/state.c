@@ -3976,6 +3976,8 @@ static void load_numbered_arrays(struct wined3d_context *context,
             if (i == 0)
             {
                 GLfloat af[4] = {0., 0., 0., 0.,};
+                if(!device->czvDrawVertices) return;
+                
                 zv_bind(context, GL_FLOAT, device->czvDrawVertices, 4, GL_FALSE, af);
 # ifdef VBOX_WITH_WINE_FIX_CURVBO
                 /* we need to invalidate the curVBO state, since buffer_get_sysmem maay change the current buffer */
@@ -4058,6 +4060,8 @@ static void load_numbered_arrays(struct wined3d_context *context,
 #ifdef VBOX_WITH_WINE_FIX_ZEROVERTATTR
             if (i == 0)
             {
+            	  if(!device->czvDrawVertices) return;
+
                 zv_bind_by_element(context, &stream_info->elements[i], device->czvDrawVertices, ptr);
 # ifdef VBOX_WITH_WINE_FIX_CURVBO
                 /* we need to invalidate the curVBO state, since buffer_get_sysmem maay change the current buffer */

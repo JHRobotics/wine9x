@@ -7457,7 +7457,7 @@ static void upload_palette(const struct wined3d_texture *texture, struct wined3d
     }
     else
     {
-        static const DWORD black;
+        static const DWORD black = 0;
         FIXME("P8 surface loaded without a palette.\n");
         gl_info->gl_ops.gl.p_glTexImage1D(GL_TEXTURE_1D, 0, GL_RGB, 1, 0, GL_BGRA,
                 GL_UNSIGNED_INT_8_8_8_8_REV, &black);
@@ -7650,7 +7650,7 @@ static GLuint arbfp_gen_plain_shader(struct arbfp_blit_priv *priv,
 static HRESULT arbfp_blit_set(void *blit_priv, struct wined3d_context *context, const struct wined3d_surface *surface,
         const struct wined3d_color_key *color_key)
 {
-    GLenum shader;
+    GLenum shader = 0;
     float size[4] = {(float) surface->pow2Width, (float) surface->pow2Height, 1.0f, 1.0f};
     struct arbfp_blit_priv *priv = blit_priv;
     enum complex_fixup fixup;
@@ -7798,7 +7798,9 @@ static BOOL arbfp_blit_supported(const struct wined3d_gl_info *gl_info,
                 return FALSE;
             }
         case WINED3D_BLIT_OP_COLOR_BLIT:
+#ifdef VBOX_WITH_WINE_FIX_BLIT_ALPHATEST
         case WINED3D_BLIT_OP_COLOR_BLIT_ALPHATEST:
+#endif
             break;
 
         default:
@@ -7889,6 +7891,7 @@ static void arbfp_blit_surface(struct wined3d_device *device, enum wined3d_blit_
     if (!wined3d_resource_is_offscreen(&dst_surface->container->resource))
         surface_translate_drawable_coords(dst_surface, context->win_handle, &dst_rect);
 
+#ifdef VBOX_WITH_WINE_FIX_BLIT_ALPHATEST
     if (op == WINED3D_BLIT_OP_COLOR_BLIT_ALPHATEST)
     {
         const struct wined3d_format *fmt = src_surface->resource.format;
@@ -7896,6 +7899,7 @@ static void arbfp_blit_surface(struct wined3d_device *device, enum wined3d_blit_
         alpha_test_key.color_space_high_value = ~(((1u << fmt->alpha_size) - 1) << fmt->alpha_offset);
         color_key = &alpha_test_key;
     }
+#endif
 
     arbfp_blit_set(device->blit_priv, context, src_surface, color_key);
 

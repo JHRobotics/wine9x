@@ -1566,7 +1566,7 @@ static void init_driver_info(struct wined3d_driver_info *driver_info,
     }
     else
     {
-        WARN("OS version %u.%u.\n", os_version.dwMajorVersion, os_version.dwMinorVersion);
+        TRACE("OS version %u.%u.\n", os_version.dwMajorVersion, os_version.dwMinorVersion);
         switch (os_version.dwMajorVersion)
         {
             case 4:
@@ -3618,7 +3618,7 @@ static BOOL wined3d_adapter_init_gl_caps(struct wined3d_adapter *adapter)
     GLint context_profile = 0;
 
     TRACE("adapter %p.\n", adapter);
-
+    
     gl_renderer_str = (const char *)gl_info->gl_ops.gl.p_glGetString(GL_RENDERER);
     TRACE("GL_RENDERER: %s.\n", debugstr_a(gl_renderer_str));
     if (!gl_renderer_str)
@@ -3997,10 +3997,12 @@ static BOOL wined3d_adapter_init_gl_caps(struct wined3d_adapter *adapter)
     /*
      * JH: disable some problematic extensions for problematic renderers
      */
-    if (strstr(gl_vendor_str, "Humper") || strstr(gl_vendor_str, "Chromium"))
-    {
+    if (strstr(gl_vendor_str, "Humper") || strstr(gl_version_str, "Chromium"))
+    { 	
       gl_info->supported[ARB_VERTEX_SHADER] = FALSE;
       gl_info->supported[ARB_HALF_FLOAT_PIXEL] = FALSE;
+      gl_info->supported[ARB_FRAGMENT_SHADER]  = FALSE;
+      
       wined3d_settings.vertex_array_brga_broken = TRUE;
     }
     

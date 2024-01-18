@@ -298,7 +298,7 @@ void device_clear_render_targets(struct wined3d_device *device, UINT rt_count, c
     GLbitfield clear_mask = 0;
     BOOL render_offscreen;
     unsigned int i;
-    RECT ds_rect;
+    RECT ds_rect = {0};
 
     context = context_acquire(device, target);
     if (!context->valid)
@@ -3815,6 +3815,11 @@ void CDECL wined3d_device_copy_resource(struct wined3d_device *device,
 
     TRACE("device %p, dst_resource %p, src_resource %p.\n", device, dst_resource, src_resource);
 
+    if (dst_resource->format->id == WINED3DFMT_R8G8B8A8_TYPELESS)
+    {
+       *((int *)&(dst_resource->format->id)) = src_resource->format->id;
+    }
+
     if (src_resource == dst_resource)
     {
         WARN("Source and destination are the same resource.\n");
@@ -5093,10 +5098,14 @@ LRESULT device_process_message(struct wined3d_device *device, HWND window, BOOL 
     {
         TRACE("Filtering message: window %p, message %#x, wparam %#lx, lparam %#lx.\n",
                 window, message, wparam, lparam);
+#ifdef USE_HOOKS
+        return 0;
+#else
         if (unicode)
             return DefWindowProcW(window, message, wparam, lparam);
         else
             return DefWindowProcA(window, message, wparam, lparam);
+#endif
     }
 
     if (message == WM_DESTROY)
@@ -5131,10 +5140,14 @@ LRESULT device_process_message(struct wined3d_device *device, HWND window, BOOL 
         }
     }
 
+#ifdef USE_HOOKS
+    return 0;
+#else
     if (unicode)
         return CallWindowProcW(proc, window, message, wparam, lparam);
     else
         return CallWindowProcA(proc, window, message, wparam, lparam);
+#endif
 }
 
 #ifdef VBOX_WITH_WINE_FIX_ZEROVERTATTR
