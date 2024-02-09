@@ -4,7 +4,7 @@
 #
 
 ################################################################################
-# Copyright (c) 2022-2023 Jaroslav Hensl                                       #
+# Copyright (c) 2022-2024 Jaroslav Hensl                                       #
 #                                                                              #
 # See LICENCE file for law informations                                        #
 # See README.md file for more build instructions                               #
@@ -22,13 +22,21 @@ include config.mk
 DEPS=Makefile config.mk
 
 # some usually free base address to easier debug
-BASE_ddraw.dll   = 0xBAAA0000
-BASE_ddrawme.dll = 0xBAAA0000
-BASE_ddraw_ver.dll = 0xBAAA0000
-BASE_dwine.dll   = 0xBA9A0000
-BASE_wined3d.dll = 0x01A00000
-BASE_d3d8.dll    = 0x00400000
-BASE_d3d9.dll    = 0x00400000
+BASE_ddraw_xp.dll  = 0xBAAA0000
+BASE_ddraw_98.dll  = 0xBAAA0000
+BASE_ddraw_95.dll  = 0xBAAA0000
+
+BASE_d3d8_xp.dll  = 0x00400000
+BASE_d3d8_98.dll  = 0x00400000
+BASE_d3d8_95.dll  = 0x00400000
+
+BASE_d3d9_xp.dll  = 0x00400000
+BASE_d3d9_98.dll  = 0x00400000
+
+BASE_wined3d.dll  = 0x01A00000
+BASE_winedd.dll   = 0xBA9A0000
+BASE_wined8.dll   = 0x01400000
+BASE_wined9.dll   = 0x01400000
 
 NULLOUT=$(if $(filter $(OS),Windows_NT),NUL,/dev/null)
 
@@ -97,7 +105,7 @@ ifdef MSC
   %.asm:
 	
   %.asm.obj: %.asm $(DEPS)
-		nasm $< -f win32 -o $@
+		$(ASM) $< -f win32 -o $@
   
   %.res: %.rc $(DEPS)
 		$(WINDRES) /nologo /fo $@ $<
@@ -197,7 +205,7 @@ else
   %.asm:
 	
   %.asm.o: %.asm $(DEPS)
-		nasm $< -f win32 -o $@
+		$(ASM) -Iswitcher $< -f win32 -o $@
 		
   %.res: %.rc $(DEPS)
 		$(WINDRES) -DWINDRES -Icompact $(RESDEF) --input $< --output $@ --output-format=coff
@@ -205,7 +213,7 @@ else
   LIBSTATIC = $(AR) rcs -o $@
 endif
 
-TARGETS := ddraw.dll ddrawme.dll ddraw_ver.dll dwine.dll d3d8.dll d3d9.dll
+TARGETS := winedd.dll wined8.dll wined9.dll ddraw_95.dll ddraw_98.dll ddraw_xp.dll d3d8_98.dll d3d9_98.dll
 
 all: $(TARGETS)
 .PHONY: all clean
@@ -286,9 +294,7 @@ ddraw_SRC = \
 	compact/exception.asm
 
 switcher_SRC = \
-	switcher/switcher.c \
-	switcher/ddstubs.c \
-	switcher/ddentry.asm
+	switcher/switcher.c
 
 ifndef MSC
   switcher_SRC += \
@@ -299,21 +305,54 @@ ifndef MSC
     nocrt/nocrt_math.c
 endif
 
-DEF_wined3d.dll = wined3d/wined3d.def
-DEF_dwine.dll   = ddraw/ddraw.def
-DEF_d3d8.dll    = d3d8/d3d8.def
-DEF_d3d9.dll    = d3d9/d3d9.def
-DEF_ddraw.dll   = switcher/ddraw.def 
-DEF_ddrawme.dll = switcher/ddraw.def 
-DEF_ddraw_ver.dll = switcher/ddraw.def 
+switcher_dd_SRC = \
+	$(switcher_SRC) \
+	switcher/ddraw_stubs.c \
+	switcher/ddraw_sw.c \
+	switcher/ddraw_debug.c \
+	switcher/ddraw_sw.asm
+
+switcher_d8_SRC = \
+	$(switcher_SRC) \
+	switcher/d3d8_stubs.c \
+	switcher/d3d8_sw.c \
+	switcher/d3d8_debug.c \
+	switcher/d3d8_sw.asm
+
+switcher_d9_SRC = \
+	$(switcher_SRC) \
+	switcher/d3d9_stubs.c \
+	switcher/d3d9_sw.c \
+	switcher/d3d9_debug.c \
+	switcher/d3d9_sw.asm
+
+DEF_wined3d.dll    = wined3d/wined3d.def
+DEF_winedd.dll     = ddraw/ddraw.def
+DEF_wined8.dll     = d3d8/d3d8.def
+DEF_wined9.dll     = d3d9/d3d9.def
+
+DEF_ddraw_xp.dll   = switcher/ddraw_xp.def
+DEF_ddraw_98.dll   = switcher/ddraw_98.def
+DEF_ddraw_95.dll   = switcher/ddraw_95.def
+
+DEF_d3d8_xp.dll   = switcher/d3d8_xp.def
+DEF_d3d8_98.dll   = switcher/d3d8_98.def
+DEF_d3d8_95.dll   = switcher/d3d8_95.def
+
+DEF_d3d9_xp.dll   = switcher/d3d9_xp.def
+DEF_d3d9_98.dll   = switcher/d3d9_98.def
 
 wined3d_OBJS  := $(wined3d_SRC:.c=.c$(OBJ))
 d3d8_OBJS     := $(d3d8_SRC:.c=.c$(OBJ))
 d3d9_OBJS     := $(d3d9_SRC:.c=.c$(OBJ))
 ddraw_OBJS    := $(ddraw_SRC:.c=.c$(OBJ))
 ddraw_OBJS    := $(ddraw_OBJS:.asm=.asm$(OBJ))
-switcher_OBJS := $(switcher_SRC:.c=.c_sw$(OBJ))
-switcher_OBJS := $(switcher_OBJS:.asm=.asm$(OBJ))
+switcher_dd_OBJS := $(switcher_dd_SRC:.c=.c_sw$(OBJ))
+switcher_dd_OBJS := $(switcher_dd_OBJS:.asm=.asm$(OBJ))
+switcher_d8_OBJS := $(switcher_d8_SRC:.c=.c_sw$(OBJ))
+switcher_d8_OBJS := $(switcher_d8_OBJS:.asm=.asm$(OBJ))
+switcher_d9_OBJS := $(switcher_d9_SRC:.c=.c_sw$(OBJ))
+switcher_d9_OBJS := $(switcher_d9_OBJS:.asm=.asm$(OBJ))
 
 ddraw_OBJS    += ddraw/dwine.res
 d3d8_OBJS     += d3d8/d3d8.res
@@ -327,13 +366,13 @@ $(LIBPREFIX)wined3d_static$(LIBSUFFIX): $(wined3d_OBJS) $(WINELIB_DEPS)
 	-$(RM) $@
 	$(LIBSTATIC) $(wined3d_OBJS)
 
-dwine.dll: $(ddraw_OBJS) $(WINED3D_LIB_NAME)
-	$(LD) $(CFLAGS) $(ddraw_OBJS)  $(DX_LIBS) $(DLLFLAGS)
+winedd.dll: $(ddraw_OBJS) $(WINED3D_LIB_NAME)
+	$(LD) $(CFLAGS) $(ddraw_OBJS) $(DX_LIBS) $(DLLFLAGS)
 	
-d3d8.dll: $(d3d8_OBJS) $(WINED3D_LIB_NAME)
+wined8.dll: $(d3d8_OBJS) $(WINED3D_LIB_NAME)
 	$(LD) $(CFLAGS) $(d3d8_OBJS) $(DX_LIBS) $(DLLFLAGS)
 
-d3d9.dll: $(d3d9_OBJS) $(WINED3D_LIB_NAME)
+wined9.dll: $(d3d9_OBJS) $(WINED3D_LIB_NAME)
 	$(LD) $(CFLAGS) $(d3d9_OBJS) $(DX_LIBS) $(DLLFLAGS)
 
 pthread9x/crtfix$(OBJ): $(DEPS) pthread9x/Makefile pthread.mk
@@ -342,14 +381,20 @@ pthread9x/crtfix$(OBJ): $(DEPS) pthread9x/Makefile pthread.mk
 pthread9x/$(LIBPREFIX)pthread$(LIBSUFFIX): $(DEPS) pthread9x/Makefile pthread.mk
 	cd pthread9x && $(MAKE)
 
-ddraw.dll: $(switcher_OBJS) switcher/ddraw.res
-	$(LD) $(CFLAGS) $(switcher_OBJS)  switcher/ddraw.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
+ddraw_xp.dll: $(switcher_dd_OBJS) switcher/ddraw_xp.res
+	$(LD) $(CFLAGS) $(switcher_dd_OBJS) switcher/ddraw_xp.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
 
-ddrawme.dll: $(switcher_OBJS) switcher/ddrawme.res
-	$(LD) $(CFLAGS) $(switcher_OBJS) switcher/ddrawme.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
-	
-ddraw_ver.dll: $(switcher_OBJS) switcher/ddraw_ver.res
-	$(LD) $(CFLAGS) $(switcher_OBJS) switcher/ddraw_ver.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
+ddraw_98.dll: $(switcher_dd_OBJS) switcher/ddraw_98.res
+	$(LD) $(CFLAGS) $(switcher_dd_OBJS) switcher/ddraw_98.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
+
+ddraw_95.dll: $(switcher_dd_OBJS) switcher/ddraw_95.res
+	$(LD) $(CFLAGS) $(switcher_dd_OBJS) switcher/ddraw_95.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
+
+d3d8_98.dll: $(switcher_d8_OBJS) switcher/d3d8_98.res
+	$(LD) $(CFLAGS) $(switcher_d8_OBJS) switcher/d3d8_98.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
+
+d3d9_98.dll: $(switcher_d9_OBJS) switcher/d3d9_98.res
+	$(LD) $(CFLAGS) $(switcher_d9_OBJS) switcher/d3d9_98.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
 
 ddreplacer.exe: ddreplacer.c$(OBJ)
 	$(CC) $< -o $@
@@ -360,7 +405,9 @@ clean:
 	-$(RM) $(d3d8_OBJS)
 	-$(RM) $(d3d9_OBJS)
 	-$(RM) $(ddraw_OBJS)
-	-$(RM) $(switcher_OBJS)
+	-$(RM) $(switcher_dd_OBJS)
+	-$(RM) $(switcher_d8_OBJS)
+	-$(RM) $(switcher_d9_OBJS)
 	-$(RM) $(LIBPREFIX)wined3d_static$(LIBSUFFIX) $(LIBPREFIX)wined3d$(LIBSUFFIX) $(LIBPREFIX)dwine$(LIBSUFFIX) $(LIBPREFIX)d3d8$(LIBSUFFIX) $(LIBPREFIX)d3d9$(LIBSUFFIX) $(LIBPREFIX)ddraw$(LIBSUFFIX) $(LIBPREFIX)ddrawme$(LIBSUFFIX)
 	-$(RM) switcher/ddraw.res
 	-$(RM) switcher/ddrawme.res

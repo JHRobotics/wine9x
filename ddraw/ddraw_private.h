@@ -56,6 +56,7 @@ struct FvfToDecl
 #define DDRAW_NO3D              0x00000008
 #define DDRAW_SCL_DDRAW1        0x00000010
 #define DDRAW_SCL_RECURSIVE     0x00000020
+#define DDRAW_GDI_FLIP          0x00000040
 
 #define DDRAW_STRIDE_ALIGNMENT  8
 
@@ -94,6 +95,7 @@ struct ddraw
     struct wined3d_surface *wined3d_frontbuffer;
     struct wined3d_swapchain *wined3d_swapchain;
     HWND swapchain_window;
+    BOOL last_gdi_blit;
 
     /* DirectDraw things, which are not handled by WineD3D */
     DWORD                   cooperative_level;

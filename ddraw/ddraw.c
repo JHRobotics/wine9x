@@ -2052,13 +2052,18 @@ static HRESULT WINAPI d3d1_Initialize(IDirect3D *iface, REFIID riid)
  *  Always returns DD_OK
  *
  *****************************************************************************/
-/*static HRESULT WINAPI ddraw7_FlipToGDISurface(IDirectDraw7 *iface)
+static HRESULT WINAPI ddraw7_FlipToGDISurface(IDirectDraw7 *iface)
 {
-    FIXME("iface %p stub!\n", iface);
+    struct ddraw *ddraw = impl_from_IDirectDraw7(iface);
+
+    TRACE("iface %p.\n", iface);
+
+    ddraw->flags |= DDRAW_GDI_FLIP;
+    ddraw_surface_update_frontbuffer(ddraw->primary, NULL, FALSE);
 
     return DD_OK;
-}*/
-static HRESULT WINAPI ddraw7_FlipToGDISurface(IDirectDraw7 *iface)
+}
+/*static HRESULT WINAPI ddraw7_FlipToGDISurface(IDirectDraw7 *iface)
 {
     struct ddraw *ddraw = impl_from_IDirectDraw7(iface);
     IDirectDrawSurface7 *gdi_surface;
@@ -2086,7 +2091,7 @@ static HRESULT WINAPI ddraw7_FlipToGDISurface(IDirectDraw7 *iface)
     wined3d_mutex_unlock();
 
     return hr;
-}
+}*/
 
 
 static HRESULT WINAPI ddraw4_FlipToGDISurface(IDirectDraw4 *iface)

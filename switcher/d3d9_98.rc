@@ -1,0 +1,40 @@
+#ifdef WINDRES
+#undef RC_INVOKED
+#endif
+#ifndef RC_INVOKED
+
+/* shutdown some MinGW warnings */
+#define _XMMINTRIN_H_INCLUDED
+
+#include "winuser.h"
+
+#include "wine9x.h"
+
+1 VERSIONINFO
+FILEVERSION 4,9,0,904
+PRODUCTVERSION 4,9,0,904
+FILEOS 0x10001
+FILETYPE 0x2
+{
+BLOCK "StringFileInfo"
+{
+	BLOCK "040904E4"
+	{
+		VALUE "CompanyName", "Microsoft Corporation"
+		VALUE "FileDescription", "Microsoft Direct3D"
+		VALUE "FileVersion", "4.09.00.0904"
+		VALUE "InternalName", "D3D9.dll"
+		VALUE "LegalCopyright", "Copyright © Microsoft Corporation.  All rights reserved."
+		VALUE "OriginalFilename", "D3D9.dll"
+		VALUE "ProductName", "WINE DirectX Wrapper " WINE9X_VERSION_STR
+		VALUE "ProductVersion", "4.09.00.0904"
+	}
+}
+
+BLOCK "VarFileInfo"
+{
+	VALUE "Translation", 0x0409, 0x04E4
+}
+}
+
+#endif

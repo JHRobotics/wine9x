@@ -12,6 +12,9 @@
 *.dll
 *.lib
 
+# new files and not ready for public repo
+*.new
+
 # release and testing scripts
 *.bat
 
