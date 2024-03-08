@@ -20,6 +20,7 @@ typedef struct _fnlistStruct {
 
 /* globals */
 const char reg_base[] = "Software\\DDSwitcher";
+const char log_name[] = "C:\\ddswitch.log";
 extern fnlistStruct fnlist;
 extern fnlistStruct fnlist_sys;
 
@@ -95,9 +96,21 @@ void switcherLoadUserLib(HMODULE lib)
 	
 	fnlistStruct *fnlist_ptr = &fnlist;
 	
-	if(lib != NULL)
+	if(unkToSystemDll)
 	{
-		#include "ddraw_list.h"
+		memset(fnlist_ptr, 0, sizeof(fnlistStruct));
+		
+		if(lib != NULL)
+		{
+			#include "ddraw_list_safe.h"
+		}
+	}
+	else
+	{
+		if(lib != NULL)
+		{
+			#include "ddraw_list.h"
+		}
 	}
 }
 

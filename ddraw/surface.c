@@ -42,6 +42,11 @@ static inline struct ddraw_surface *impl_from_IDirectDrawGammaControl(IDirectDra
  * to support windowless rendering first. */
 HRESULT ddraw_surface_update_frontbuffer(struct ddraw_surface *surface, const RECT *rect, BOOL read)
 {
+	if(surface == NULL)
+	{
+		return E_FAIL;
+	}
+	
     struct ddraw *ddraw = surface->ddraw;
     HDC surface_dc, screen_dc;
     BOOL gdi_blit = FALSE;
@@ -1826,7 +1831,10 @@ static HRESULT WINAPI ddraw_surface4_AddAttachedSurface(IDirectDrawSurface4 *ifa
     struct ddraw_surface *surface = impl_from_IDirectDrawSurface4(iface);
     struct ddraw_surface *attachment_impl = unsafe_impl_from_IDirectDrawSurface4(attachment);
     HRESULT hr;
-
+    
+    if(surface == NULL || attachment_impl == NULL)
+			return DDERR_CANNOTATTACHSURFACE;
+		
     TRACE("iface %p, attachment %p.\n", iface, attachment);
 
     /* Tests suggest that

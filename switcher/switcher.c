@@ -5,12 +5,17 @@
 
 #include "switcher.h"
 
+#include "3d_accel.h"
+
 #include "nocrt.h"
 
 /* globals */
 static HMODULE thisDLL = NULL;
 static HMODULE userlib = NULL;
 static HMODULE systemlib = NULL;
+
+/* settings */
+BOOL unkToSystemDll = FALSE;
 
 /* build in blacklist */
 static const char *blacklist_exe[] = {
@@ -26,15 +31,13 @@ static const char *blacklist_dll[] = {
 	NULL
 };
 
-#define FILE_LOG "C:\\ddswitch.log"
-
 /* debug */
 void dbg_printf(const char *fmt, ...)
 {
 	va_list vl;
 	static char modulename[MAX_PATH+1];
 	
-	FILE *fa = fopen(FILE_LOG, "ab");
+	FILE *fa = fopen(log_name, "ab");
 	if(fa)
 	{
 		va_start(vl, fmt);
@@ -88,6 +91,60 @@ BOOL isWindows2k()
 	}
 	
 	return FALSE;
+}
+
+BOOL getVMDISP9xFlags(DWORD *pFlags)
+{
+	HWND hDesktop = GetDesktopWindow();
+	HDC hdc = GetDC(hDesktop);
+	FBHDA_t *hda = NULL;
+
+	if(ExtEscape(hdc, OP_FBHDA_SETUP, 0, NULL, sizeof(FBHDA_t *), (LPVOID)&hda))
+	{
+		if(hda != NULL)
+		{
+			if(hda->cb == sizeof(FBHDA_t))
+			{
+				*pFlags = hda->flags;
+				return TRUE;
+			}
+		}
+	}
+	
+	return FALSE;
+}
+
+BOOL isNineSafe(DWORD drv_flags)
+{
+	/* is forced to use software Mesa OpenGL */
+	if(drv_flags & FB_FORCE_SOFTWARE)
+		return TRUE;
+	
+	/* no Nine on ViRGE */
+	if(drv_flags & FB_ACCEL_VIRGE)
+		return FALSE;
+	
+	/* no Nine on VirtualBox 6.0 */
+	if(drv_flags & FB_ACCEL_CHROMIUM)
+		return FALSE;
+	
+	/* no Nine on 3dfx QEMU */
+	if(drv_flags & FB_ACCEL_QEMU3DFX)
+		return FALSE;
+	
+	/* not using Nine when vGPU10 is disabled */
+	if((drv_flags & (FB_ACCEL_VMSVGA | FB_ACCEL_VMSVGA3D)) ==
+			(FB_ACCEL_VMSVGA | FB_ACCEL_VMSVGA3D)
+		)
+	{
+		if((drv_flags & FB_ACCEL_VMSVGA10) == 0)
+		{
+			return FALSE;
+		}
+	}
+	
+	/* vGPU10 or software Mesa */
+	return TRUE;
 }
 
 HMODULE tryLoad(const char *path, const char *check_entry)
@@ -222,7 +279,8 @@ static char *getSettings(char *buffer, const char *exe)
 	        {
 	        	/* conv DWORD to string */
 	        	DWORD tmp = *((DWORD*)buffer);
-	        	sprintf(buffer, "%u", tmp);	        	
+	        	sprintf(buffer, "%u", tmp);	
+	        	result = buffer;
 	          break;
 	        }
 	      }
@@ -248,7 +306,8 @@ static char *getSettings(char *buffer, const char *exe)
 	        {
 	        	/* conv DWORD to string */
 	        	DWORD tmp = *((DWORD*)buffer);
-	        	sprintf(buffer, "%u", tmp);	        	
+	        	sprintf(buffer, "%u", tmp);	     
+	        	result = buffer;   	
 	          break;
 	        }
 	      }

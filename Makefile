@@ -34,7 +34,8 @@ BASE_d3d9_xp.dll  = 0x00400000
 BASE_d3d9_98.dll  = 0x00400000
 
 BASE_wined3d.dll  = 0x01A00000
-BASE_winedd.dll   = 0xBA9A0000
+#BASE_winedd.dll   = 0xBA9A0000
+BASE_winedd.dll   = 0x01400000
 BASE_wined8.dll   = 0x01400000
 BASE_wined9.dll   = 0x01400000
 
@@ -138,7 +139,7 @@ else
   endif
   
   ifdef LTO
-    CFLAGS += -flto=$(LTO)
+    CFLAGS += -flto=auto
   endif
 
   CFLAGS += -Wno-write-strings -Wno-cast-qual -Imingw -Iinclude -Iinclude/wine -Icompact -Ipthread9x/include -D_WIN32 -DWIN32 -D__WINESRC__ \
@@ -178,7 +179,7 @@ else
   endif
 
   WINED3D_LIBS  = pthread9x/crtfix$(OBJ) -static-libgcc -L. -Lpthread9x -lpthread -lgdi32 -lopengl32
-  SWITCHER_LIBS = -ladvapi32 -lkernel32 -luser32
+  SWITCHER_LIBS = -ladvapi32 -lkernel32 -luser32 -lgdi32
   
   WINELIB_DEPS = pthread9x/crtfix$(OBJ) pthread9x/$(LIBPREFIX)pthread$(LIBSUFFIX)
 
@@ -213,7 +214,10 @@ else
   LIBSTATIC = $(AR) rcs -o $@
 endif
 
-TARGETS := winedd.dll wined8.dll wined9.dll ddraw_95.dll ddraw_98.dll ddraw_xp.dll d3d8_98.dll d3d9_98.dll
+TARGETS := winedd.dll wined8.dll wined9.dll
+TARGETS += ddraw_95.dll ddraw_98.dll ddraw_xp.dll
+TARGETS += d3d8_95.dll d3d8_98.dll d3d8_xp.dll
+TARGETS += d3d9_98.dll d3d9_xp.dll
 
 all: $(TARGETS)
 .PHONY: all clean
@@ -390,11 +394,23 @@ ddraw_98.dll: $(switcher_dd_OBJS) switcher/ddraw_98.res
 ddraw_95.dll: $(switcher_dd_OBJS) switcher/ddraw_95.res
 	$(LD) $(CFLAGS) $(switcher_dd_OBJS) switcher/ddraw_95.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
 
+d3d8_xp.dll: $(switcher_d8_OBJS) switcher/d3d8_xp.res
+	$(LD) $(CFLAGS) $(switcher_d8_OBJS) switcher/d3d8_xp.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
+
 d3d8_98.dll: $(switcher_d8_OBJS) switcher/d3d8_98.res
 	$(LD) $(CFLAGS) $(switcher_d8_OBJS) switcher/d3d8_98.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
 
+d3d8_95.dll: $(switcher_d8_OBJS) switcher/d3d8_95.res
+	$(LD) $(CFLAGS) $(switcher_d8_OBJS) switcher/d3d8_95.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
+
+d3d9_xp.dll: $(switcher_d9_OBJS) switcher/d3d9_xp.res
+	$(LD) $(CFLAGS) $(switcher_d9_OBJS) switcher/d3d9_xp.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
+
 d3d9_98.dll: $(switcher_d9_OBJS) switcher/d3d9_98.res
 	$(LD) $(CFLAGS) $(switcher_d9_OBJS) switcher/d3d9_98.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
+
+d3d9_95.dll: $(switcher_d9_OBJS) switcher/d3d9_95.res
+	$(LD) $(CFLAGS) $(switcher_d9_OBJS) switcher/d3d9_95.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
 
 ddreplacer.exe: ddreplacer.c$(OBJ)
 	$(CC) $< -o $@

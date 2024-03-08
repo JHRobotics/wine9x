@@ -1452,7 +1452,7 @@ static HRESULT buffer_init(struct wined3d_buffer *buffer, struct wined3d_device 
     return WINED3D_OK;
 }
 
-HRESULT CDECL wined3d_buffer_create(struct wined3d_device *device, const struct wined3d_buffer_desc *desc,
+HRESULT __cdecl wined3d_buffer_create(struct wined3d_device *device, const struct wined3d_buffer_desc *desc,
         const struct wined3d_sub_resource_data *data, void *parent, const struct wined3d_parent_ops *parent_ops,
         struct wined3d_buffer **buffer)
 {
@@ -1485,7 +1485,7 @@ HRESULT CDECL wined3d_buffer_create(struct wined3d_device *device, const struct 
     return WINED3D_OK;
 }
 
-HRESULT CDECL wined3d_buffer_create_vb(struct wined3d_device *device, UINT size, DWORD usage, enum wined3d_pool pool,
+HRESULT __cdecl wined3d_buffer_create_vb(struct wined3d_device *device, UINT size, DWORD usage, enum wined3d_pool pool,
         void *parent, const struct wined3d_parent_ops *parent_ops, struct wined3d_buffer **buffer)
 {
     struct wined3d_buffer *object;
@@ -1525,7 +1525,7 @@ HRESULT CDECL wined3d_buffer_create_vb(struct wined3d_device *device, UINT size,
     return WINED3D_OK;
 }
 
-HRESULT CDECL wined3d_buffer_create_ib(struct wined3d_device *device, UINT size, DWORD usage, enum wined3d_pool pool,
+HRESULT __cdecl wined3d_buffer_create_ib(struct wined3d_device *device, UINT size, DWORD usage, enum wined3d_pool pool,
         void *parent, const struct wined3d_parent_ops *parent_ops, struct wined3d_buffer **buffer)
 {
     struct wined3d_buffer *object;

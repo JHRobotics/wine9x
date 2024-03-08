@@ -9,6 +9,8 @@ void getSysPath(char *buf, char *dllname);
 BOOL fncheck(BYTE *returnaddress, DWORD fn);
 void fnprint(DWORD fn);
 HMODULE tryLoad(const char *path, const char *check_entry);
+BOOL getVMDISP9xFlags(DWORD *pFlags);
+BOOL isNineSafe(DWORD drv_flags);
 
 /* modules */
 void switcherLoadUserLib(HMODULE lib);
@@ -24,11 +26,15 @@ void dbg_printf(const char *fmt, ...);
 #ifdef DEBUG
 # define DBG(_fmt, ...) dbg_printf(_fmt __VA_OPT__(,) __VA_ARGS__)
 #else
-# define DBG(_fmt, ...) dbg_printf(_fmt __VA_OPT__(,) __VA_ARGS__)
+# define DBG(_fmt, ...) do{}while(0)
 #endif
+
+/* global setting */
+extern BOOL unkToSystemDll;
 
 /* globals from modules */
 extern const char  reg_base[];
 extern const char *fn_names[];
+extern const char  log_name[];
 
 #endif /* __SWITCHER_H__INCLUDED__ */

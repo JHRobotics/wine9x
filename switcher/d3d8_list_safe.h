@@ -1,0 +1,1 @@
+FUNC1(Direct3DCreate8, DDERR_GENERIC)
