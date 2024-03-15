@@ -42,22 +42,17 @@ static inline struct ddraw_surface *impl_from_IDirectDrawGammaControl(IDirectDra
  * to support windowless rendering first. */
 HRESULT ddraw_surface_update_frontbuffer(struct ddraw_surface *surface, const RECT *rect, BOOL read)
 {
-	if(surface == NULL)
-	{
-		return E_FAIL;
-	}
-	
-    struct ddraw *ddraw = surface->ddraw;
     HDC surface_dc, screen_dc;
-    BOOL gdi_blit = FALSE;
     int x, y, w, h;
     HRESULT hr;
     BOOL ret;
+    
+    if(surface == NULL)
+    {
+        return E_FAIL;
+    }
 
-    if (!surface->ddraw->swapchain_window || surface->ddraw->swapchain_window != GetForegroundWindow())
-        gdi_blit = TRUE;
-
-    if (!rect || gdi_blit != surface->ddraw->last_gdi_blit)
+    if (!rect)
     {
         x = 0;
         y = 0;
@@ -72,23 +67,19 @@ HRESULT ddraw_surface_update_frontbuffer(struct ddraw_surface *surface, const RE
         h = rect->bottom - rect->top;
     }
 
-    surface->ddraw->last_gdi_blit = gdi_blit;
-
     if (w <= 0 || h <= 0)
         return DD_OK;
 
-    if (ddraw->swapchain_window && !(ddraw->flags & DDRAW_GDI_FLIP))
+    if (surface->ddraw->swapchain_window)
     {
         /* Nothing to do, we control the frontbuffer, or at least the parts we
          * care about. */
         if (read)
             return DD_OK;
 
-        return wined3d_surface_blt(ddraw->wined3d_frontbuffer, rect,
+        return wined3d_surface_blt(surface->ddraw->wined3d_frontbuffer, rect,
                 surface->wined3d_surface, rect, 0, NULL, WINED3D_TEXF_POINT);
     }
-
-    TRACE("Using GDI to update frontbuffer.\n");
 
     if (FAILED(hr = wined3d_surface_getdc(surface->wined3d_surface, &surface_dc)))
     {
@@ -1340,9 +1331,11 @@ static HRESULT WINAPI DECLSPEC_HOTPATCH ddraw_surface7_Flip(IDirectDrawSurface7 
 
     if (flags)
     {
-        static UINT once = 0;
+        static UINT once;
         if (!once++)
             FIXME("Ignoring flags %#x.\n", flags);
+        else
+            WARN("Ignoring flags %#x.\n", flags);
     }
 
     if (dst_impl->surface_desc.ddsCaps.dwCaps & DDSCAPS_PRIMARYSURFACE)

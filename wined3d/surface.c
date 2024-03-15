@@ -2580,12 +2580,7 @@ HRESULT CDECL wined3d_surface_map(struct wined3d_surface *surface,
         struct wined3d_context *context2 = NULL;
 
         if (surface->resource.usage & WINED3DUSAGE_DYNAMIC)
-        {
-		        static unsigned int once = 0;
-
-        		if (!once++)
-     	       WARN_(d3d_perf)("Mapping a dynamic surface without WINED3D_MAP_DISCARD.\n");
-        }
+            WARN_(d3d_perf)("Mapping a dynamic surface without WINED3D_MAP_DISCARD.\n");
 
         if (surface->resource.device->d3d_initialized)
             context2 = context_acquire(surface->resource.device, NULL);
@@ -3511,13 +3506,11 @@ static HRESULT surface_blt_special(struct wined3d_surface *dst_surface, const RE
 
     if (src_surface)
     {
-#if 0
         if (src_surface->resource.pool == WINED3D_POOL_SYSTEM_MEM)
         {
             WARN("Src is in sysmem, rejecting gl blt\n");
             return WINED3DERR_INVALIDCALL;
         }
-#endif
 
         src_swapchain = src_surface->container->swapchain;
     }
@@ -4742,8 +4735,8 @@ static HRESULT surface_cpu_blt(struct wined3d_surface *dst_surface, const RECT *
 
         if (!dstwidth || !dstheight) /* Hmm... stupid program? */
             goto release;
-                                                                           /* JH: fixme WINED3D_TEXF_LINEAR is handled as WINED3D_TEXF_POINT */
-        if (filter != WINED3D_TEXF_NONE && filter != WINED3D_TEXF_POINT && filter != WINED3D_TEXF_LINEAR
+
+        if (filter != WINED3D_TEXF_NONE && filter != WINED3D_TEXF_POINT
                 && (srcwidth != dstwidth || srcheight != dstheight))
         {
             /* Can happen when d3d9 apps do a StretchRect() call which isn't handled in GL. */
