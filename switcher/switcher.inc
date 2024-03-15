@@ -5,13 +5,14 @@
 ;		push eax
 ;		call _initSW
 ;		add esp,4
+		call _switcher_reinit
 
 		mov eax,fnlistStruct.p %+ %1
 		push eax
 		call _fnprint
 		
-		mov eax,[esp]
-		push esp
+		mov eax,[esp+4]
+		push eax
 		call _fncheck
 		add esp,8
 		test eax, eax

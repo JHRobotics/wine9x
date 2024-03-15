@@ -4013,11 +4013,10 @@ static BOOL wined3d_adapter_init_gl_caps(struct wined3d_adapter *adapter)
     		/* in vGPU gen. 9 not working vertex extension */
     		gl_info->supported[ARB_DRAW_ELEMENTS_BASE_VERTEX] = FALSE;
     		wined3d_settings.vertex_array_brga_broken = TRUE;
-    	}
-    	else
-    	{
-    		/* vGPU gen. 10 supporting near only 32 surfaces */
-    		//wined3d_settings.force32bit = TRUE;
+    		
+    		/* shader don't work anyway */
+    		wined3d_settings.max_sm_vs = 0;
+    		wined3d_settings.max_sm_ps = 0;
     	}
     }
 

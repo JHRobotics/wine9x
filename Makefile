@@ -22,15 +22,15 @@ include config.mk
 DEPS=Makefile config.mk
 
 # some usually free base address to easier debug
-BASE_ddraw_xp.dll  = 0xBAAA0000
+BASE_ddraw_xp.dll  = 0x73720000
 BASE_ddraw_98.dll  = 0xBAAA0000
 BASE_ddraw_95.dll  = 0xBAAA0000
 
-BASE_d3d8_xp.dll  = 0x00400000
+BASE_d3d8_xp.dll  = 0x6DF20000
 BASE_d3d8_98.dll  = 0x00400000
 BASE_d3d8_95.dll  = 0x00400000
 
-BASE_d3d9_xp.dll  = 0x00400000
+BASE_d3d9_xp.dll  = 0x4FD70000
 BASE_d3d9_98.dll  = 0x00400000
 
 BASE_wined3d.dll  = 0x01A00000
@@ -139,7 +139,7 @@ else
   endif
   
   ifdef LTO
-    CFLAGS += -flto=auto
+    CFLAGS += -flto=auto -pipe
   endif
 
   CFLAGS += -Wno-write-strings -Wno-cast-qual -Imingw -Iinclude -Iinclude/wine -Icompact -Ipthread9x/include -D_WIN32 -DWIN32 -D__WINESRC__ \

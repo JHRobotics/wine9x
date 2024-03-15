@@ -15,7 +15,7 @@ static HMODULE userlib = NULL;
 static HMODULE systemlib = NULL;
 
 /* settings */
-BOOL unkToSystemDll = FALSE;
+BOOL unkToSystemDll = TRUE;
 
 /* build in blacklist */
 static const char *blacklist_exe[] = {
@@ -162,6 +162,11 @@ HMODULE tryLoad(const char *path, const char *check_entry)
 		
 		FreeLibrary(lib);
 	}
+	else
+	{	
+		DBG("LoadLibraryA(%s): %ld", path, GetLastError());
+	}
+	
 	return NULL;
 }
 
@@ -347,6 +352,16 @@ BOOL switcher_init()
 	return TRUE;
 }
 
+static volatile DWORD need_init = 0;
+
+void switcher_reinit()
+{
+	if(InterlockedExchange(&need_init, 1) == 0)
+	{
+		switcher_init();
+	}
+}
+
 void switcher_free()
 {
 	if(userlib != NULL)
@@ -369,8 +384,11 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
   {
     case DLL_PROCESS_ATTACH:
     	thisDLL = (HMODULE)inst;
+    	/* 
+    	JH: We cannot call LoadLibrary here! (on 9x works, on XP no)
     	if(!switcher_init())
     		return FALSE;
+    	*/
     		
     	break;
     case DLL_PROCESS_DETACH:

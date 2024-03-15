@@ -4,6 +4,7 @@ extern _fnlist
 extern _fnlist_sys
 extern _fnprint
 extern _fncheck
+extern _switcher_reinit
 
 %include "switcher_mf_struct.inc"
 struc fnlistStruct

@@ -1250,8 +1250,10 @@ BOOL context_set_current(struct wined3d_context *ctx)
 
 void context_release(struct wined3d_context *context)
 {
-    TRACE("Releasing context %p, level %u.\n", context, context->level);
+    if(context == NULL) return;
 
+    TRACE("Releasing context %p, level %u.\n", context, context->level);
+    
     if (WARN_ON(d3d))
     {
         if (!context->level)
