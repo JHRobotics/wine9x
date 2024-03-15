@@ -412,6 +412,12 @@ d3d9_98.dll: $(switcher_d9_OBJS) switcher/d3d9_98.res
 d3d9_95.dll: $(switcher_d9_OBJS) switcher/d3d9_95.res
 	$(LD) $(CFLAGS) $(switcher_d9_OBJS) switcher/d3d9_95.res $(SWITCHER_LIBS) $(DLLFLAGS_NOCRT)
 
+SLIBS  = $(LIBPREFIX)wined3d_static$(LIBSUFFIX) $(LIBPREFIX)wined3d$(LIBSUFFIX)
+SLIBS += $(LIBPREFIX)winedd$(LIBSUFFIX) $(LIBPREFIX)wined8$(LIBSUFFIX) $(LIBPREFIX)wined9$(LIBSUFFIX)
+SLIBS += $(LIBPREFIX)ddraw_95$(LIBSUFFIX) $(LIBPREFIX)ddraw_98$(LIBSUFFIX) $(LIBPREFIX)ddraw_xp$(LIBSUFFIX)
+SLIBS += $(LIBPREFIX)d3d8_95$(LIBSUFFIX) $(LIBPREFIX)d3d8_98$(LIBSUFFIX) $(LIBPREFIX)d3d8_xp$(LIBSUFFIX)
+SLIBS += $(LIBPREFIX)d3d9_98$(LIBSUFFIX) $(LIBPREFIX)d3d9_xp$(LIBSUFFIX)
+
 ddreplacer.exe: ddreplacer.c$(OBJ)
 	$(CC) $< -o $@
 
@@ -424,7 +430,7 @@ clean:
 	-$(RM) $(switcher_dd_OBJS)
 	-$(RM) $(switcher_d8_OBJS)
 	-$(RM) $(switcher_d9_OBJS)
-	-$(RM) $(LIBPREFIX)wined3d_static$(LIBSUFFIX) $(LIBPREFIX)wined3d$(LIBSUFFIX) $(LIBPREFIX)dwine$(LIBSUFFIX) $(LIBPREFIX)d3d8$(LIBSUFFIX) $(LIBPREFIX)d3d9$(LIBSUFFIX) $(LIBPREFIX)ddraw$(LIBSUFFIX) $(LIBPREFIX)ddrawme$(LIBSUFFIX)
+	-$(RM) $(SLIBS)
 	-$(RM) switcher/ddraw.res
 	-$(RM) switcher/ddrawme.res
 	-$(RM) switcher/ddraw_ver.res

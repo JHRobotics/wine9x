@@ -405,11 +405,11 @@ static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
               wined3d_settings.check_float_constants = TRUE;
           }
 	        
-	        if (!get_config_key_dword(hkey, appkey, "MaxShaderModelVS", &wined3d_settings.max_sm_vs))
+	        if (!get_config_key_dword(hkey, appkey, "MaxShaderModelVS", (DWORD*)&wined3d_settings.max_sm_vs))
 	            TRACE("Limiting VS shader model to %u.\n", wined3d_settings.max_sm_vs);
-	        if (!get_config_key_dword(hkey, appkey, "MaxShaderModelGS", &wined3d_settings.max_sm_gs))
+	        if (!get_config_key_dword(hkey, appkey, "MaxShaderModelGS", (DWORD*)&wined3d_settings.max_sm_gs))
 	            TRACE("Limiting GS shader model to %u.\n", wined3d_settings.max_sm_gs);
-	        if (!get_config_key_dword(hkey, appkey, "MaxShaderModelPS", &wined3d_settings.max_sm_ps))
+	        if (!get_config_key_dword(hkey, appkey, "MaxShaderModelPS", (DWORD*)&wined3d_settings.max_sm_ps))
 	            TRACE("Limiting PS shader model to %u.\n", wined3d_settings.max_sm_ps);
 	        if (!get_config_key(hkey, appkey, "DirectDrawRenderer", buffer, size)
 	                && !strcmp(buffer, "gdi"))
@@ -446,8 +446,6 @@ static BOOL wined3d_dll_destroy(HINSTANCE hInstDLL)
     	wine_hook = NULL;
     }
 #endif
-    
-    wined3d_restore_display_state();
 
     if (!TlsFree(wined3d_context_tls_idx))
     {
@@ -721,6 +719,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
             {
             	return wined3d_dll_destroy(inst);
             }
+            wined3d_restore_display_state();
             break;
 
         case DLL_THREAD_DETACH:

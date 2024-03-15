@@ -15,7 +15,7 @@ static HMODULE userlib = NULL;
 static HMODULE systemlib = NULL;
 
 /* settings */
-BOOL unkToSystemDll = TRUE;
+BOOL unkToSystemDll = FALSE;
 
 /* build in blacklist */
 static const char *blacklist_exe[] = {
