@@ -103,7 +103,7 @@ BOOL getVMDISP9xFlags(DWORD *pFlags)
 	{
 		if(hda != NULL)
 		{
-			if(hda->cb == sizeof(FBHDA_t))
+			if(hda->cb == sizeof(FBHDA_t) && hda->version == API_3DACCEL_VER)
 			{
 				*pFlags = hda->flags;
 				return TRUE;
