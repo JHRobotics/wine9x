@@ -4139,33 +4139,32 @@ BOOL EnumDisplaySettingsA95(LPCSTR lpszDeviceName, DWORD iModeNum, DEVMODEA *lpD
 {
 	if(isWindows95())
 	{
-		if(iModeNum == ENUM_REGISTRY_SETTINGS)
+		if(iModeNum != ENUM_CURRENT_SETTINGS)
 		{
-			if(lpDevMode)
+			DEVMODEA devmodetmp = {};
+			devmodetmp.dmSize = sizeof(DEVMODEA95);
+			
+			if(EnumDisplaySettingsA(NULL, iModeNum, &devmodetmp))
 			{
-				DWORD devModeSize = lpDevMode->dmSize;
-				DEVMODEA devmodetmp = {};
-				devmodetmp.dmSize = sizeof(DEVMODEA95);
-				
-				memset(lpDevMode, 0, devModeSize);
-				lpDevMode->dmSize = devModeSize;
-				
-				if(EnumDisplaySettingsA(NULL, ENUM_REGISTRY_SETTINGS, &devmodetmp))
+				if(lpDevMode != NULL)
 				{
+					DWORD devModeSize = lpDevMode->dmSize;	
+					memset(lpDevMode, 0, devModeSize);
+					lpDevMode->dmSize = devModeSize;
+					
 					lpDevMode->dmBitsPerPel = devmodetmp.dmBitsPerPel;
 					lpDevMode->dmPelsWidth  = devmodetmp.dmPelsWidth;
 					lpDevMode->dmPelsHeight = devmodetmp.dmPelsHeight;
+					lpDevMode->dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
 					
-					return TRUE;
+					if(devmodetmp.dmFields & DM_DISPLAYFREQUENCY)
+					{
+						lpDevMode->dmDisplayFrequency = devmodetmp.dmDisplayFrequency;
+						lpDevMode->dmFields |= DM_DISPLAYFREQUENCY;
+					}
 				}
-				return FALSE;
+				return TRUE;
 			}
-			
-			return TRUE;
-		}
-		
-		if(!(iModeNum == ENUM_CURRENT_SETTINGS || iModeNum == ENUM_REGISTRY_SETTINGS || iModeNum == 0))
-		{
 			return FALSE;
 		}
 		
@@ -4437,6 +4436,9 @@ LONG WINAPI ChangeDisplaySettingsExA95(LPCSTR lpszDeviceName, DEVMODEA *lpDevMod
 	{
 		lpDevMode->dmSize = sizeof(DEVMODEA95);
 	}
+	
+	/* mask all unsupported fields */
+	lpDevMode->dmFields &= DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY;
 	
 	return ChangeDisplaySettingsA(lpDevMode, dwflags);
 }

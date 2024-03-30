@@ -166,8 +166,34 @@ static DEVMODEA init_display_state;
 
 static void wined3d_save_display_state()
 {
+	DEVMODEA current;
 	memset(&init_display_state, 0, sizeof(init_display_state));
-	EnumDisplaySettingsA95(NULL, ENUM_CURRENT_SETTINGS, &init_display_state);
+	memset(&current, 0, sizeof(DEVMODEA));
+	init_display_state.dmSize = sizeof(DEVMODEA);
+	current.dmSize = sizeof(DEVMODEA);
+	BOOL rc;
+	
+	rc = EnumDisplaySettingsA95(NULL, ENUM_REGISTRY_SETTINGS, &init_display_state);
+	if(rc)
+	{
+		rc = EnumDisplaySettingsA95(NULL, ENUM_CURRENT_SETTINGS, &init_display_state);
+	}
+	
+	if(!rc)
+	{
+		init_display_state.dmPelsWidth = 0;
+		init_display_state.dmPelsHeight = 0;
+	}
+	
+	if(current.dmPelsWidth != init_display_state.dmPelsWidth || 
+		current.dmPelsHeight != init_display_state.dmPelsHeight ||
+		current.dmBitsPerPel != init_display_state.dmBitsPerPel
+		)
+	{
+		/* when mode is different to registry settings, we don't want to restore it! */
+		init_display_state.dmPelsWidth = 0;
+		init_display_state.dmPelsHeight = 0;
+	}
 }
 
 static void wined3d_restore_display_state()
