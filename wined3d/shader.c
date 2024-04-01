@@ -2103,7 +2103,11 @@ static HRESULT shader_set_function(struct wined3d_shader *shader, const DWORD *b
     {
         WARN("Shader version %d.%d not supported by your GPU with the current shader backend.\n",
                 reg_maps->shader_version.major, reg_maps->shader_version.minor);
-        return WINED3DERR_INVALIDCALL;
+        //return WINED3DERR_INVALIDCALL;
+    		/* 
+    			JH: some SW don't check calls result and directly access the result object,
+    			    so we will silently continue and allocate memory.
+    		*/
     }
 
     shader->function = malloc( shader->functionLength);

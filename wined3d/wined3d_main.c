@@ -60,6 +60,7 @@ static unsigned int DLLValid = 0;
 
 #ifdef USE_HOOKS
 HHOOK wine_hook = NULL;
+HHOOK wine_hook_pos = NULL;
 #endif
 
 static struct wined3d_wndproc_table wndproc_table;
@@ -109,6 +110,7 @@ struct wined3d_settings wined3d_settings =
     FALSE,          /* allway 32bit rendering disabled by default */
     FALSE,          /* VERTEX_ARRAY_BRGA is OK on most cases */
     FALSE,          /* CheckFloatConstants disabled by default */
+    FALSE,          /* system cursor is visible or hidden by application */
 };
 
 struct wined3d * CDECL wined3d_create(DWORD flags)
@@ -219,6 +221,7 @@ static void wined3d_restore_display_state()
 }
 
 static LRESULT CALLBACK wine_hook_proc(int nCode, WPARAM wParam, LPARAM lParam);
+static LRESULT CALLBACK wine_hook_proc_pos(int nCode, WPARAM wParam, LPARAM lParam);
 
 static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
 {
@@ -272,7 +275,7 @@ static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
     DisableThreadLibraryCalls(hInstDLL);
 
 #ifdef USE_HOOKS
-    wine_hook = SetWindowsHookExA(WH_CALLWNDPROC, wine_hook_proc, NULL, GetCurrentThreadId());
+    wine_hook     = SetWindowsHookExA(WH_CALLWNDPROC, wine_hook_proc, NULL, GetCurrentThreadId());
 #endif
     
     for(r = 0; r < 2; r++) /* r == 0: original wine registry path; r == 1: wine9x registry path */
@@ -443,11 +446,28 @@ static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
 	            TRACE("Disabling 3D support.\n");
 	            wined3d_settings.no_3d = TRUE;
 	        }
+	        
+          if (!get_config_key(hkey, appkey, "HideCursor", buffer, size))
+          {
+          		if(strcmp(buffer, "enabled") == 0 || atoi(buffer) >  0)
+          		{
+              	TRACE("Hidding system cursor.\n");
+              	wined3d_settings.hide_sys_cursor = TRUE;
+              }
+          }
+	        
 	    }
 	
 	    if (appkey) RegCloseKey( appkey );
 	    if (hkey) RegCloseKey( hkey );
 	  }
+
+#ifdef USE_HOOKS
+    if(wined3d_settings.hide_sys_cursor)
+    {
+    	wine_hook_pos = SetWindowsHookExA(WH_CALLWNDPROCRET, wine_hook_proc_pos, NULL, GetCurrentThreadId());
+    }
+#endif
     
     /* windows 9x require to inicialize critical section */
     InitializeCriticalSection(&wined3d_wndproc_cs);
@@ -470,6 +490,11 @@ static BOOL wined3d_dll_destroy(HINSTANCE hInstDLL)
     {
     	UnhookWindowsHookEx(wine_hook);
     	wine_hook = NULL;
+    }
+    if(wine_hook_pos)
+    {
+    	UnhookWindowsHookEx(wine_hook_pos);
+    	wine_hook_pos = NULL;
     }
 #endif
 
@@ -606,6 +631,21 @@ static LRESULT CALLBACK wine_hook_proc(int nCode, WPARAM wParam, LPARAM lParam)
 	wined3d_wndproc_mutex_unlock();
 	
 	return CallNextHookEx(NULL, nCode, wParam, lParam);
+}
+
+static LRESULT CALLBACK wine_hook_proc_pos(int nCode, WPARAM wParam, LPARAM lParam)
+{
+	if (nCode >= HC_ACTION)
+	{
+		const LPCWPRETSTRUCT lpcwprs = (LPCWPRETSTRUCT)lParam;
+		switch (lpcwprs->message)
+		{
+			case WM_SETCURSOR:
+				SetCursor(NULL);
+				break;
+		}
+	}
+	return CallNextHookEx(wine_hook_pos, nCode, wParam, lParam); 
 }
 #endif
 
