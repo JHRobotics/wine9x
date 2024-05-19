@@ -1404,7 +1404,7 @@ static HRESULT ddraw_surface_blt_clipped(struct ddraw_surface *dst_surface, cons
     RECT src_rect, dst_rect;
     float scale_x, scale_y;
     const RECT *clip_rect;
-    UINT clip_list_size;
+    DWORD clip_list_size;
     RGNDATA *clip_list;
     HRESULT hr = DD_OK;
     UINT i;
