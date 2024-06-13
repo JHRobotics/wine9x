@@ -7,10 +7,11 @@
 #
 
 # compiler names
-CC = gcc
-LD = gcc
-AR = ar
-WINDRES = $(PREFIX)windres
+CC      = i686-w64-mingw32-gcc
+LD      = i686-w64-mingw32-gcc
+AR      = i686-w64-mingw32-ar
+WINDRES = i686-w64-mingw32-windres
+ASM     = nasm
 
 # force using delete utility - microsoft or GNU one
 RM = rm -f
