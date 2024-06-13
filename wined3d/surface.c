@@ -2354,6 +2354,301 @@ static void convert_yuy2_r5g6b5(const BYTE *src, BYTE *dst,
     }
 }
 
+static void convert_dxt1_a4r4g4b4(const BYTE *src, BYTE *dst,
+        DWORD pitch_in, DWORD pitch_out, unsigned int w, unsigned int h)
+{
+    static const unsigned char convert_5to4[] =
+    {
+        0x0, 0x0, 0x1, 0x1, 0x2, 0x2, 0x3, 0x3,
+        0x4, 0x4, 0x5, 0x5, 0x6, 0x6, 0x7, 0x7,
+        0x8, 0x8, 0x9, 0x9, 0xa, 0xa, 0xb, 0xb,
+        0xc, 0xc, 0xd, 0xd, 0xe, 0xe, 0xf, 0xf,
+    };
+
+    static const unsigned char convert_6to4[] =
+    {
+        0x0, 0x0, 0x0, 0x0, 0x1, 0x1, 0x1, 0x1,
+        0x2, 0x2, 0x2, 0x2, 0x3, 0x3, 0x3, 0x3,
+        0x4, 0x4, 0x4, 0x4, 0x5, 0x5, 0x5, 0x5,
+        0x6, 0x6, 0x6, 0x6, 0x7, 0x7, 0x7, 0x7,
+        0x8, 0x8, 0x8, 0x8, 0x9, 0x9, 0x9, 0x9,
+        0xa, 0xa, 0xa, 0xa, 0xb, 0xb, 0xb, 0xb,
+        0xc, 0xc, 0xc, 0xc, 0xd, 0xd, 0xd, 0xd,
+        0xe, 0xe, 0xe, 0xe, 0xf, 0xf, 0xf, 0xf,
+    };
+
+    unsigned int x, y;
+    TRACE("Converting %ux%u pixels, pitches %u %u\n", w, h, pitch_in, pitch_out);
+    
+    for (y = 0; y < h; y += 4)
+    {
+        const BYTE *src_line = (const BYTE *)(src + (y / 4) * pitch_in);
+        WORD *dst_line = (WORD *)(dst + y  * pitch_out);
+        WORD *dst_line1 = (WORD *)(dst + (y + 1) * pitch_out);
+        WORD *dst_line2 = (WORD *)(dst + (y + 2) * pitch_out);
+        WORD *dst_line3 = (WORD *)(dst + (y + 3) * pitch_out);
+        
+        for (x = 0; x < w; x += 4)
+        {
+            /* Deal with endianness of extreme pixels */
+            WORD c0 = src_line[2 * x] | src_line[2 * x + 1] << 8;
+            WORD c1 = src_line[2 * x + 2] | src_line[2 * x + 3] << 8;
+            
+            /* Store RGB565 values from extreme pixels as ARGB4444 */
+            WORD cmap[4];
+            cmap[0] = 0xf000
+                    | convert_5to4[(c0 & 0xf800) >> 11] << 8
+                    | convert_6to4[(c0 & 0x07e0) >> 5] << 4
+                    | convert_5to4[(c0 & 0x001f)];
+            cmap[1] = 0xf000
+                    | convert_5to4[(c1 & 0xf800) >> 11] << 8
+                    | convert_6to4[(c1 & 0x07e0) >> 5] << 4
+                    | convert_5to4[(c1 & 0x001f)];
+            
+            /* Interpolate intermediate colours */
+            
+            WORD r0 = cmap[0] >> 8 & 0x000f;
+            WORD g0 = cmap[0] >> 4 & 0x000f;
+            WORD b0 = cmap[0] & 0x000f;
+            
+            WORD r1 = cmap[1] >> 8 & 0x000f;
+            WORD g1 = cmap[1] >> 4 & 0x000f;
+            WORD b1 = cmap[1] & 0x000f;
+            
+            if (c0 > c1)
+            {
+                cmap[2] = 0xf000 | ((2 * r0 + r1) / 3 & 0x000f) << 8 | ((2 * g0 + g1) / 3 & 0x000f) << 4 | ((2 * b0 + b1) / 3 & 0x000f);
+                cmap[3] = 0xf000 | ((r0 + 2 * r1) / 3 & 0x000f) << 8 | ((g0 + 2 * g1) / 3 & 0x000f) << 4 | ((b0 + 2 * b1) / 3 & 0x000f);
+            }
+            else
+            {
+                cmap[2] = 0xf000 | ((r0 + r1) / 2 & 0x000f) << 8 | ((g0 + g1) / 2 & 0x000f) << 4 | ((b0 + b1) / 2 & 0x000f);
+                cmap[3] = 0x0000;
+            }
+            
+            /* Deal with endianness of bitmap */
+            DWORD bitmap = src_line[2 * x + 4]
+                | src_line[2 * x + 5] << 8
+                | src_line[2 * x + 6] << 16
+                | src_line[2 * x + 7] << 24;
+            
+            dst_line[x] = cmap[bitmap & 0x00000003];
+            dst_line[x + 1] = cmap[bitmap >> 2 & 0x00000003];
+            dst_line[x + 2] = cmap[bitmap >> 4 & 0x00000003];
+            dst_line[x + 3] = cmap[bitmap >> 6 & 0x00000003];
+            dst_line1[x] = cmap[bitmap >> 8 & 0x00000003];
+            dst_line1[x + 1] = cmap[bitmap >> 10 & 0x00000003];
+            dst_line1[x + 2] = cmap[bitmap >> 12 & 0x00000003];
+            dst_line1[x + 3] = cmap[bitmap >> 14 & 0x00000003];
+            dst_line2[x] = cmap[bitmap >> 16 & 0x00000003];
+            dst_line2[x + 1] = cmap[bitmap >> 18 & 0x00000003];
+            dst_line2[x + 2] = cmap[bitmap >> 20 & 0x00000003];
+            dst_line2[x + 3] = cmap[bitmap >> 22 & 0x00000003];
+            dst_line3[x] = cmap[bitmap >> 24 & 0x00000003];
+            dst_line3[x + 1] = cmap[bitmap >> 26 & 0x00000003];
+            dst_line3[x + 2] = cmap[bitmap >> 28 & 0x00000003];
+            dst_line3[x + 3] = cmap[bitmap >> 30 & 0x00000003];
+        }
+    }
+}
+
+static void convert_dxt1_x1r5g5b5(const BYTE *src, BYTE *dst,
+        DWORD pitch_in, DWORD pitch_out, unsigned int w, unsigned int h)
+{
+    static const unsigned char convert_6to5[] =
+    {
+        0x00, 0x00, 0x01, 0x01, 0x02, 0x02, 0x03, 0x03,
+        0x04, 0x04, 0x05, 0x05, 0x06, 0x06, 0x07, 0x07,
+        0x08, 0x08, 0x09, 0x09, 0x0a, 0x0a, 0x0b, 0x0b,
+        0x0c, 0x0c, 0x0d, 0x0d, 0x0e, 0x0e, 0x0f, 0x0f,
+        0x10, 0x10, 0x11, 0x11, 0x12, 0x12, 0x13, 0x13,
+        0x14, 0x14, 0x15, 0x15, 0x16, 0x16, 0x17, 0x17,
+        0x18, 0x18, 0x19, 0x19, 0x1a, 0x1a, 0x1b, 0x1b,
+        0x1c, 0x1c, 0x1d, 0x1d, 0x1e, 0x1e, 0x1f, 0x1f,
+    };
+
+    unsigned int x, y;
+    TRACE("Converting %ux%u pixels, pitches %u %u\n", w, h, pitch_in, pitch_out);
+    
+    for (y = 0; y < h; y += 4)
+    {
+        const BYTE *src_line = (const BYTE *)(src + (y / 4) * pitch_in);
+        WORD *dst_line = (WORD *)(dst + y  * pitch_out);
+        WORD *dst_line1 = (WORD *)(dst + (y + 1) * pitch_out);
+        WORD *dst_line2 = (WORD *)(dst + (y + 2) * pitch_out);
+        WORD *dst_line3 = (WORD *)(dst + (y + 3) * pitch_out);
+        
+        for (x = 0; x < w; x += 4)
+        {
+            /* Deal with endianness of extreme pixels */
+            WORD c0 = src_line[2 * x] | src_line[2 * x + 1] << 8;
+            WORD c1 = src_line[2 * x + 2] | src_line[2 * x + 3] << 8;
+            
+            /* Store RGB565 values from extreme pixels as XRGB1555 */
+            WORD cmap[4];
+            cmap[0] = 0x8000
+                    | (c0 & 0xf800) >> 1
+                    | convert_6to5[(c0 & 0x07e0) >> 5] << 5
+                    | (c0 & 0x001f);
+            cmap[1] = 0x8000
+                    | (c1 & 0xf800) >> 1
+                    | convert_6to5[(c1 & 0x07e0) >> 5] << 5
+                    | (c1 & 0x001f);
+            
+            /* Interpolate intermediate colours */
+            
+            WORD r0 = cmap[0] >> 10 & 0x001f;
+            WORD g0 = cmap[0] >> 5 & 0x001f;
+            WORD b0 = cmap[0] & 0x001f;
+            
+            WORD r1 = cmap[1] >> 10 & 0x001f;
+            WORD g1 = cmap[1] >> 5 & 0x001f;
+            WORD b1 = cmap[1] & 0x001f;
+            
+            if (c0 > c1)
+            {
+                cmap[2] = 0x8000 | ((2 * r0 + r1) / 3 & 0x001f) << 10 | ((2 * g0 + g1) / 3 & 0x001f) << 5 | ((2 * b0 + b1) / 3 & 0x001f);
+                cmap[3] = 0x8000 | ((r0 + 2 * r1) / 3 & 0x001f) << 10 | ((g0 + 2 * g1) / 3 & 0x001f) << 5 | ((b0 + 2 * b1) / 3 & 0x001f);
+            }
+            else
+            {
+                cmap[2] = 0x8000 | ((r0 + r1) / 2 & 0x001f) << 10 | ((g0 + g1) / 2 & 0x001f) << 5 | ((b0 + b1) / 2 & 0x001f);
+                cmap[3] = 0x0000;
+            }
+            
+            /* Deal with endianness of bitmap */
+            DWORD bitmap = src_line[2 * x + 4]
+                | src_line[2 * x + 5] << 8
+                | src_line[2 * x + 6] << 16
+                | src_line[2 * x + 7] << 24;
+            
+            dst_line[x] = cmap[bitmap & 0x00000003];
+            dst_line[x + 1] = cmap[bitmap >> 2 & 0x00000003];
+            dst_line[x + 2] = cmap[bitmap >> 4 & 0x00000003];
+            dst_line[x + 3] = cmap[bitmap >> 6 & 0x00000003];
+            dst_line1[x] = cmap[bitmap >> 8 & 0x00000003];
+            dst_line1[x + 1] = cmap[bitmap >> 10 & 0x00000003];
+            dst_line1[x + 2] = cmap[bitmap >> 12 & 0x00000003];
+            dst_line1[x + 3] = cmap[bitmap >> 14 & 0x00000003];
+            dst_line2[x] = cmap[bitmap >> 16 & 0x00000003];
+            dst_line2[x + 1] = cmap[bitmap >> 18 & 0x00000003];
+            dst_line2[x + 2] = cmap[bitmap >> 20 & 0x00000003];
+            dst_line2[x + 3] = cmap[bitmap >> 22 & 0x00000003];
+            dst_line3[x] = cmap[bitmap >> 24 & 0x00000003];
+            dst_line3[x + 1] = cmap[bitmap >> 26 & 0x00000003];
+            dst_line3[x + 2] = cmap[bitmap >> 28 & 0x00000003];
+            dst_line3[x + 3] = cmap[bitmap >> 30 & 0x00000003];
+        }
+    }
+}
+
+static void convert_dxt3_a4r4g4b4(const BYTE *src, BYTE *dst,
+        DWORD pitch_in, DWORD pitch_out, unsigned int w, unsigned int h)
+{
+    static const unsigned char convert_5to4[] =
+    {
+        0x0, 0x0, 0x1, 0x1, 0x2, 0x2, 0x3, 0x3,
+        0x4, 0x4, 0x5, 0x5, 0x6, 0x6, 0x7, 0x7,
+        0x8, 0x8, 0x9, 0x9, 0xa, 0xa, 0xb, 0xb,
+        0xc, 0xc, 0xd, 0xd, 0xe, 0xe, 0xf, 0xf,
+    };
+
+    static const unsigned char convert_6to4[] =
+    {
+        0x0, 0x0, 0x0, 0x0, 0x1, 0x1, 0x1, 0x1,
+        0x2, 0x2, 0x2, 0x2, 0x3, 0x3, 0x3, 0x3,
+        0x4, 0x4, 0x4, 0x4, 0x5, 0x5, 0x5, 0x5,
+        0x6, 0x6, 0x6, 0x6, 0x7, 0x7, 0x7, 0x7,
+        0x8, 0x8, 0x8, 0x8, 0x9, 0x9, 0x9, 0x9,
+        0xa, 0xa, 0xa, 0xa, 0xb, 0xb, 0xb, 0xb,
+        0xc, 0xc, 0xc, 0xc, 0xd, 0xd, 0xd, 0xd,
+        0xe, 0xe, 0xe, 0xe, 0xf, 0xf, 0xf, 0xf,
+    };
+
+    unsigned int x, y;
+    TRACE("Converting %ux%u pixels, pitches %u %u\n", w, h, pitch_in, pitch_out);
+    
+    for (y = 0; y < h; y += 4)
+    {
+        const BYTE *src_line = (const BYTE *)(src + (y / 4) * pitch_in);
+        WORD *dst_line = (WORD *)(dst + y  * pitch_out);
+        WORD *dst_line1 = (WORD *)(dst + (y + 1) * pitch_out);
+        WORD *dst_line2 = (WORD *)(dst + (y + 2) * pitch_out);
+        WORD *dst_line3 = (WORD *)(dst + (y + 3) * pitch_out);
+        
+        for (x = 0; x < w; x += 4)
+        {
+            /* Handle endianness of alphamap */
+            long long alphamap = src_line[4 * x]
+                | src_line[4 * x + 1] << 8
+                | src_line[4 * x + 2] << 16
+                | src_line[4 * x + 3] << 24
+                | src_line[4 * x + 4] << 32
+                | src_line[4 * x + 5] << 40
+                | src_line[4 * x + 6] << 48
+                | src_line[4 * x + 7] << 56;
+            
+            /* Deal with endianness of extreme pixels */
+            WORD c0 = src_line[4 * x + 8] | src_line[4 * x + 9] << 8;
+            WORD c1 = src_line[4 * x + 10] | src_line[4 * x + 11] << 8;
+            
+            /* Store RGB565 values from extreme pixels as ARGB4444 */
+            WORD cmap[4];
+            cmap[0] = 0x0000
+                    | convert_5to4[(c0 & 0xf800) >> 11] << 8
+                    | convert_6to4[(c0 & 0x07e0) >> 5] << 4
+                    | convert_5to4[(c0 & 0x001f)];
+            cmap[1] = 0x0000
+                    | convert_5to4[(c1 & 0xf800) >> 11] << 8
+                    | convert_6to4[(c1 & 0x07e0) >> 5] << 4
+                    | convert_5to4[(c1 & 0x001f)];
+            
+            /* Interpolate intermediate colours */
+            
+            WORD r0 = cmap[0] >> 8 & 0x000f;
+            WORD g0 = cmap[0] >> 4 & 0x000f;
+            WORD b0 = cmap[0] & 0x000f;
+            
+            WORD r1 = cmap[1] >> 8 & 0x000f;
+            WORD g1 = cmap[1] >> 4 & 0x000f;
+            WORD b1 = cmap[1] & 0x000f;
+            
+            cmap[2] = 0x0000
+                | ((2 * r0 + r1) / 3 & 0x000f) << 8
+                | ((2 * g0 + g1) / 3 & 0x000f) << 4
+                | ((2 * b0 + b1) / 3 & 0x000f);
+            cmap[3] = 0x0000
+                | ((r0 + 2 * r1) / 3 & 0x000f) << 8
+                | ((g0 + 2 * g1) / 3 & 0x000f) << 4
+                | ((b0 + 2 * b1) / 3 & 0x000f);
+            
+            /* Deal with endianness of bitmap */
+            DWORD bitmap = src_line[4 * x + 12]
+                | src_line[4 * x + 13] << 8
+                | src_line[4 * x + 14] << 16
+                | src_line[4 * x + 15] << 24;
+            
+            dst_line[x] = cmap[bitmap & 0x00000003] | (alphamap & 0x000000000000000f) << 12;
+            dst_line[x + 1] = cmap[bitmap >> 2 & 0x00000003] | (alphamap >> 4 & 0x000000000000000f) << 12;
+            dst_line[x + 2] = cmap[bitmap >> 4 & 0x00000003] | (alphamap >> 8 & 0x000000000000000f) << 12;
+            dst_line[x + 3] = cmap[bitmap >> 6 & 0x00000003] | (alphamap >> 12 & 0x000000000000000f) << 12;
+            dst_line1[x] = cmap[bitmap >> 8 & 0x00000003] | (alphamap >> 16 & 0x000000000000000f) << 12;
+            dst_line1[x + 1] = cmap[bitmap >> 10 & 0x00000003] | (alphamap >> 20 & 0x000000000000000f) << 12;
+            dst_line1[x + 2] = cmap[bitmap >> 12 & 0x00000003] | (alphamap >> 24 & 0x000000000000000f) << 12;
+            dst_line1[x + 3] = cmap[bitmap >> 14 & 0x00000003] | (alphamap >> 28 & 0x000000000000000f) << 12;
+            dst_line2[x] = cmap[bitmap >> 16 & 0x00000003] | (alphamap >> 32 & 0x000000000000000f) << 12;
+            dst_line2[x + 1] = cmap[bitmap >> 18 & 0x00000003] | (alphamap >> 36 & 0x000000000000000f) << 12;
+            dst_line2[x + 2] = cmap[bitmap >> 20 & 0x00000003] | (alphamap >> 40 & 0x000000000000000f) << 12;
+            dst_line2[x + 3] = cmap[bitmap >> 22 & 0x00000003] | (alphamap >> 44 & 0x000000000000000f) << 12;
+            dst_line3[x] = cmap[bitmap >> 24 & 0x00000003] | (alphamap >> 48 & 0x000000000000000f) << 12;
+            dst_line3[x + 1] = cmap[bitmap >> 26 & 0x00000003] | (alphamap >> 52 & 0x000000000000000f) << 12;
+            dst_line3[x + 2] = cmap[bitmap >> 28 & 0x00000003] | (alphamap >> 56 & 0x000000000000000f) << 12;
+            dst_line3[x + 3] = cmap[bitmap >> 30 & 0x00000003] | (alphamap >> 60 & 0x000000000000000f) << 12;
+        }
+    }
+}
+
+
 struct d3dfmt_converter_desc
 {
     enum wined3d_format_id from, to;
@@ -2368,6 +2663,9 @@ static const struct d3dfmt_converter_desc converters[] =
     {WINED3DFMT_B8G8R8X8_UNORM, WINED3DFMT_B8G8R8A8_UNORM,  convert_a8r8g8b8_x8r8g8b8},
     {WINED3DFMT_YUY2,           WINED3DFMT_B8G8R8X8_UNORM,  convert_yuy2_x8r8g8b8},
     {WINED3DFMT_YUY2,           WINED3DFMT_B5G6R5_UNORM,    convert_yuy2_r5g6b5},
+    {WINED3DFMT_DXT1,           WINED3DFMT_B4G4R4A4_UNORM,  convert_dxt1_a4r4g4b4},
+    {WINED3DFMT_DXT1,           WINED3DFMT_B5G5R5X1_UNORM,  convert_dxt1_x1r5g5b5},
+    {WINED3DFMT_DXT3,           WINED3DFMT_B4G4R4A4_UNORM,  convert_dxt3_a4r4g4b4},
 };
 
 static inline const struct d3dfmt_converter_desc *find_converter(enum wined3d_format_id from,
