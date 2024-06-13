@@ -2540,7 +2540,7 @@ static HRESULT WINAPI d3d8_device_GetVertexShaderFunction(IDirect3DDevice8 *ifac
         return D3D_OK;
     }
 
-    hr = wined3d_shader_get_byte_code(shader_impl->wined3d_shader, data, data_size);
+    hr = wined3d_shader_get_byte_code(shader_impl->wined3d_shader, data, (PUINT)data_size);
     wined3d_mutex_unlock();
 
     return hr;
@@ -2784,7 +2784,7 @@ static HRESULT WINAPI d3d8_device_GetPixelShaderFunction(IDirect3DDevice8 *iface
         return D3DERR_INVALIDCALL;
     }
 
-    hr = wined3d_shader_get_byte_code(shader_impl->wined3d_shader, data, data_size);
+    hr = wined3d_shader_get_byte_code(shader_impl->wined3d_shader, data, (PUINT)data_size);
     wined3d_mutex_unlock();
 
     return hr;

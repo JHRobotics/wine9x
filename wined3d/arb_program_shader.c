@@ -251,7 +251,7 @@ struct shader_arb_ctx_priv
     int                                 aL;
     BOOL                                ps_post_process;
 
-    unsigned int                        vs_clipplanes;
+    DWORD                               vs_clipplanes;
     BOOL                                footer_written;
     BOOL                                in_main_func;
 
