@@ -2579,14 +2579,14 @@ static void convert_dxt3_a4r4g4b4(const BYTE *src, BYTE *dst,
         for (x = 0; x < w; x += 4)
         {
             /* Handle endianness of alphamap */
-            long long alphamap = src_line[4 * x]
-                | src_line[4 * x + 1] << 8
-                | src_line[4 * x + 2] << 16
-                | src_line[4 * x + 3] << 24
-                | src_line[4 * x + 4] << 32
-                | src_line[4 * x + 5] << 40
-                | src_line[4 * x + 6] << 48
-                | src_line[4 * x + 7] << 56;
+            unsigned long long alphamap = src_line[4 * x]
+                | (unsigned long long)src_line[4 * x + 1] << 8
+                | (unsigned long long)src_line[4 * x + 2] << 16
+                | (unsigned long long)src_line[4 * x + 3] << 24
+                | (unsigned long long)src_line[4 * x + 4] << 32
+                | (unsigned long long)src_line[4 * x + 5] << 40
+                | (unsigned long long)src_line[4 * x + 6] << 48
+                | (unsigned long long)src_line[4 * x + 7] << 56;
             
             /* Deal with endianness of extreme pixels */
             WORD c0 = src_line[4 * x + 8] | src_line[4 * x + 9] << 8;
