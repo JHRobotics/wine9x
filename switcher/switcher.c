@@ -261,6 +261,20 @@ static char *getSettings(char *buffer, const char *exe)
 	HKEY hKey;
 	DWORD size;
 	char *result = NULL;
+	int i;
+	
+	if(exe != NULL)
+	{
+		for(i = 0; blacklist_exe[i] != NULL; i++)
+		{
+			if(stricmp(exe, blacklist_exe[i]) == 0)
+			{
+				result = buffer;
+				strcpy(result, "system");
+				break;
+			}
+		}
+	}
 	
 	lResult = RegOpenKeyEx(HKEY_LOCAL_MACHINE, reg_base, 0, KEY_READ, &hKey);
 	if(lResult == ERROR_SUCCESS)
