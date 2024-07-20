@@ -363,20 +363,22 @@ d3d8_OBJS     += d3d8/d3d8.res
 d3d9_OBJS     += d3d9/d3d9.res
 wined3d_OBJS  += wined3d/wined3d.res
 
-wined3d.dll: $(wined3d_OBJS) compact/debug.c$(OBJ) $(WINELIB_DEPS)
+LD_DEPS := pthread9x/$(LIBPREFIX)pthread$(LIBSUFFIX)
+
+wined3d.dll: $(wined3d_OBJS) compact/debug.c$(OBJ) $(WINELIB_DEPS) $(LD_DEPS)
 	$(LD) $(CFLAGS) $(wined3d_OBJS) compact/debug.c$(OBJ) $(WINED3D_LIBS) $(DLLFLAGS)
 
 $(LIBPREFIX)wined3d_static$(LIBSUFFIX): $(wined3d_OBJS) $(WINELIB_DEPS)
 	-$(RM) $@
 	$(LIBSTATIC) $(wined3d_OBJS)
 
-winedd.dll: $(ddraw_OBJS) $(WINED3D_LIB_NAME)
+winedd.dll: $(ddraw_OBJS) $(WINED3D_LIB_NAME) $(LD_DEPS)
 	$(LD) $(CFLAGS) $(ddraw_OBJS) $(DX_LIBS) $(DLLFLAGS)
 	
-wined8.dll: $(d3d8_OBJS) $(WINED3D_LIB_NAME)
+wined8.dll: $(d3d8_OBJS) $(WINED3D_LIB_NAME) $(LD_DEPS)
 	$(LD) $(CFLAGS) $(d3d8_OBJS) $(DX_LIBS) $(DLLFLAGS)
 
-wined9.dll: $(d3d9_OBJS) $(WINED3D_LIB_NAME)
+wined9.dll: $(d3d9_OBJS) $(WINED3D_LIB_NAME) $(LD_DEPS)
 	$(LD) $(CFLAGS) $(d3d9_OBJS) $(DX_LIBS) $(DLLFLAGS)
 
 pthread9x/crtfix$(OBJ): $(DEPS) pthread9x/Makefile pthread.mk
