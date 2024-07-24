@@ -24,6 +24,8 @@ const char log_name[] = "C:\\d9switch.log";
 extern fnlistStruct fnlist;
 extern fnlistStruct fnlist_sys;
 
+static BOOL msd3d9_loaded = FALSE;
+
 HMODULE switcherGetUserLib(const char *exe, const char *settings)
 {
 	HANDLE lib = NULL;
@@ -80,7 +82,7 @@ HMODULE switcherGetSystemLib(const char *exe, const char *settings)
 {
 	HANDLE lib = NULL;
 	char path_to_dll[MAX_PATH];
-	
+	msd3d9_loaded = TRUE;
 	
 	RET_ON_SUC(lib, tryLoad("msd3d9.dll", FN_TO_CHECK));
 	
@@ -90,6 +92,8 @@ HMODULE switcherGetSystemLib(const char *exe, const char *settings)
 	/* system dll */
 	getSysPath(path_to_dll, "d3d9.dll");
 	RET_ON_SUC(lib, tryLoad(path_to_dll, FN_TO_CHECK));
+	
+	msd3d9_loaded = FALSE;
 	
 	return NULL;
 }
@@ -101,8 +105,8 @@ void switcherLoadUserLib(HMODULE lib)
 	void *proc;
 	
 	fnlistStruct *fnlist_ptr = &fnlist;
-	
-	if(unkToSystemDll)
+
+	if(msd3d9_loaded)
 	{
 		memset(fnlist_ptr, 0, sizeof(fnlistStruct));
 		

@@ -381,8 +381,7 @@ wined8.dll: $(d3d8_OBJS) $(WINED3D_LIB_NAME) $(LD_DEPS)
 wined9.dll: $(d3d9_OBJS) $(WINED3D_LIB_NAME) $(LD_DEPS)
 	$(LD) $(CFLAGS) $(d3d9_OBJS) $(DX_LIBS) $(DLLFLAGS)
 
-pthread9x/crtfix$(OBJ): $(DEPS) pthread9x/Makefile pthread.mk
-	cd pthread9x && $(MAKE)
+pthread9x/crtfix$(OBJ): $(DEPS) pthread9x/$(LIBPREFIX)pthread$(LIBSUFFIX)
 
 pthread9x/$(LIBPREFIX)pthread$(LIBSUFFIX): $(DEPS) pthread9x/Makefile pthread.mk
 	cd pthread9x && $(MAKE)
