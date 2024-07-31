@@ -139,7 +139,7 @@ else
   endif
   
   ifdef LTO
-    CFLAGS += -flto=auto -pipe
+    CFLAGS += -flto=auto -fno-fat-lto-objects -pipe -Werror=implicit-function-declaration
   endif
 
   CFLAGS += -Wno-write-strings -Wno-cast-qual -Imingw -Iinclude -Iinclude/wine -Icompact -Ipthread9x/include -D_WIN32 -DWIN32 -D__WINESRC__ \
