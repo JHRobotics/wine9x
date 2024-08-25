@@ -963,7 +963,7 @@ static HRESULT surface_lock(struct ddraw_surface *This,
         RECT *Rect, DDSURFACEDESC2 *DDSD, DWORD Flags, HANDLE h)
 {
     struct wined3d_box box;
-    struct wined3d_map_desc map_desc;
+    struct wined3d_map_desc map_desc = {0};
     HRESULT hr = DD_OK;
 
     TRACE("This %p, rect %s, surface_desc %p, flags %#x, h %p.\n",
