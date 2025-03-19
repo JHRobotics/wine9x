@@ -180,7 +180,9 @@ else
 
   WINED3D_LIBS  = pthread9x/crtfix$(OBJ) -static-libgcc -L. -Lpthread9x -lpthread -lgdi32 -lopengl32
   SWITCHER_LIBS = -ladvapi32 -lkernel32 -luser32 -lgdi32
-  
+
+  WINETRAY_LIBS = -static -nostdlib -nodefaultlibs -lgcc -luser32 -lkernel32 -lgdi32 -lole32 -Wl,-subsystem,console
+
   WINELIB_DEPS = pthread9x/crtfix$(OBJ) pthread9x/$(LIBPREFIX)pthread$(LIBSUFFIX)
 
   OBJ := .o
@@ -218,6 +220,7 @@ TARGETS := winedd.dll wined8.dll wined9.dll
 TARGETS += ddraw_95.dll ddraw_98.dll ddraw_xp.dll
 TARGETS += d3d8_95.dll d3d8_98.dll d3d8_xp.dll
 TARGETS += d3d9_98.dll d3d9_xp.dll
+TARGETS += winetray.exe
 
 all: $(TARGETS)
 .PHONY: all clean
@@ -298,15 +301,21 @@ ddraw_SRC = \
 	compact/exception.asm
 
 switcher_SRC = \
-	switcher/switcher.c
+  switcher/switcher.c
+
+winetray_SRC = \
+  tray/winetray.c
 
 ifndef MSC
-  switcher_SRC += \
+  NOCRT_SRC += \
     nocrt/nocrt.c \
-    nocrt/nocrt_dll.c \
     nocrt/nocrt_file_win.c \
     nocrt/nocrt_mem_win.c \
     nocrt/nocrt_math.c
+ 
+  switcher_SRC += $(NOCRT_SRC) nocrt/nocrt_dll.c
+	
+  winetray_SRC += $(NOCRT_SRC) nocrt/nocrt_exe.c
 endif
 
 switcher_dd_SRC = \
@@ -358,6 +367,8 @@ switcher_d8_OBJS := $(switcher_d8_OBJS:.asm=.asm$(OBJ))
 switcher_d9_OBJS := $(switcher_d9_SRC:.c=.c_sw$(OBJ))
 switcher_d9_OBJS := $(switcher_d9_OBJS:.asm=.asm$(OBJ))
 
+winetray_OBJS := $(winetray_SRC:.c=.c_sw$(OBJ))
+
 ddraw_OBJS    += ddraw/dwine.res
 d3d8_OBJS     += d3d8/d3d8.res
 d3d9_OBJS     += d3d9/d3d9.res
@@ -380,6 +391,9 @@ wined8.dll: $(d3d8_OBJS) $(WINED3D_LIB_NAME) $(LD_DEPS)
 
 wined9.dll: $(d3d9_OBJS) $(WINED3D_LIB_NAME) $(LD_DEPS)
 	$(LD) $(CFLAGS) $(d3d9_OBJS) $(DX_LIBS) $(DLLFLAGS)
+
+winetray.exe: $(winetray_OBJS)
+	$(LD) $(CFLAGS) $(winetray_OBJS) -o $@ $(WINETRAY_LIBS)
 
 pthread9x/crtfix$(OBJ): $(DEPS) pthread9x/$(LIBPREFIX)pthread$(LIBSUFFIX)
 
