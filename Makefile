@@ -181,7 +181,7 @@ else
   WINED3D_LIBS  = pthread9x/crtfix$(OBJ) -static-libgcc -L. -Lpthread9x -lpthread -lgdi32 -lopengl32
   SWITCHER_LIBS = -ladvapi32 -lkernel32 -luser32 -lgdi32
 
-  WINETRAY_LIBS = -static -nostdlib -nodefaultlibs -lgcc -luser32 -lkernel32 -lgdi32 -lole32 -Wl,-subsystem,console
+  WINETRAY_LIBS = -static -nostdlib -nodefaultlibs -lgcc -luser32 -lkernel32 -lgdi32 -lole32 -lshell32 -Wl,-subsystem,windows
 
   WINELIB_DEPS = pthread9x/crtfix$(OBJ) pthread9x/$(LIBPREFIX)pthread$(LIBSUFFIX)
 
@@ -373,6 +373,7 @@ ddraw_OBJS    += ddraw/dwine.res
 d3d8_OBJS     += d3d8/d3d8.res
 d3d9_OBJS     += d3d9/d3d9.res
 wined3d_OBJS  += wined3d/wined3d.res
+winetray_OBJS += tray/winetray.res
 
 LD_DEPS := pthread9x/$(LIBPREFIX)pthread$(LIBSUFFIX)
 
