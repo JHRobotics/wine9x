@@ -28,6 +28,8 @@
 #include "initguid.h"
 #include "wined3d_private.h"
 
+#include "vmsetup.h"
+
 #include <stdio.h>
 
 #ifdef HAVE_CRTEX
@@ -232,7 +234,7 @@ static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
     HKEY appkey = 0;
     DWORD len, tmpvalue;
     WNDCLASSA wc;
-    int r;
+    char *ptr;
     
     wined3d_save_display_state();
 
@@ -278,17 +280,7 @@ static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
     wine_hook     = SetWindowsHookExA(WH_CALLWNDPROC, wine_hook_proc, NULL, GetCurrentThreadId());
 #endif
     
-    for(r = 0; r < 2; r++) /* r == 0: original wine registry path; r == 1: wine9x registry path */
-    {
-	    /* @@ Wine registry key: HKCU\Software\Wine\Direct3D */
-	    if(r == 0)
-	    {
-	    	if ( RegOpenKeyA(HKEY_CURRENT_USER, "Software\\Wine\\Direct3D", &hkey ) != ERROR_SUCCESS ) hkey = 0;
-	    }
-	    else
-	    {
-	    	if ( RegOpenKeyA(HKEY_LOCAL_MACHINE, "Software\\Wine\\global", &hkey) != ERROR_SUCCESS ) hkey = 0;
-	    }
+	    if ( RegOpenKeyA(HKEY_CURRENT_USER, "Software\\Wine\\Direct3D", &hkey ) != ERROR_SUCCESS ) hkey = 0;
 	
 	    len = GetModuleFileNameA( 0, buffer, MAX_PATH );
 	    if (len && len < MAX_PATH)
@@ -297,24 +289,14 @@ static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
 	        LSTATUS rc;
 	        /* @@ Wine registry key: HKCU\Software\Wine\AppDefaults\app.exe\Direct3D */
 	        /* OR Wine9x key: HKLM\Software\Wine\app.exe */
-	        if(r == 0)
-	        {
-	        	rc = RegOpenKeyA( HKEY_CURRENT_USER, "Software\\Wine\\AppDefaults", &tmpkey );
-	        }
-	        else
-	        {
-	        	rc = RegOpenKeyA( HKEY_LOCAL_MACHINE, "Software\\Wine", &tmpkey );
-	        }
+	        rc = RegOpenKeyA( HKEY_CURRENT_USER, "Software\\Wine\\AppDefaults", &tmpkey );
 	        
 	        if (rc == ERROR_SUCCESS)
 	        {
 	            char *p, *appname = buffer;
 	            if ((p = strrchr( appname, '/' ))) appname = p + 1;
 	            if ((p = strrchr( appname, '\\' ))) appname = p + 1;
-	            if(r == 0)
-	            {
 	            	strcat( appname, "\\Direct3D" );
-	            }
 	            
 	            TRACE("appname = [%s]\n", appname);
 	            if (RegOpenKeyA( tmpkey, appname, &appkey )) appkey = 0;
@@ -460,6 +442,108 @@ static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
 	
 	    if (appkey) RegCloseKey( appkey );
 	    if (hkey) RegCloseKey( hkey );
+	    	
+	  /* vmsetup */
+	  tmpvalue = vmhal_setup_dw("wine", "MaxVersionGL");
+	  if(tmpvalue > 0)
+	  {
+	  	if(tmpvalue != wined3d_settings.max_gl_version)
+	  	{
+	  		wined3d_settings.max_gl_version = tmpvalue;
+	  	}
+	  }
+
+	  if(strcmp(vmhal_setup_str("wine", "MaxVersionGL", TRUE), "disabled") == 0)
+	  {
+	  	wined3d_settings.glslRequested = FALSE;
+	  }
+
+	  if(strcmp(vmhal_setup_str("wine", "OffscreenRenderingMode", TRUE), "backbuffer") == 0)
+	  {
+	  	wined3d_settings.offscreen_rendering_mode = ORM_BACKBUFFER;
+	  }
+
+	  if(strcmp(vmhal_setup_str("wine", "OffscreenRenderingMode", TRUE), "fbo") == 0)
+	  {
+	  	wined3d_settings.offscreen_rendering_mode = ORM_FBO;
+	  }
+	  
+	  if(vmhal_setup_str("wine", "VideoPciDeviceID", FALSE) != NULL)
+	  {
+	  	tmpvalue = vmhal_setup_dw("wine", "VideoPciDeviceID");
+	  	if(tmpvalue < 0xffff)
+	  	{
+	  		wined3d_settings.pci_device_id = tmpvalue;
+	  	}
+	  }
+	  
+	  if(vmhal_setup_str("wine", "VideoPciVendorID", FALSE) != NULL)
+	  {
+	  	tmpvalue = vmhal_setup_dw("wine", "VideoPciVendorID");
+	  	if(tmpvalue < 0xffff)
+	  	{
+	  		wined3d_settings.pci_vendor_id = tmpvalue;
+	  	}
+	  }
+
+		ptr = vmhal_setup_str("wine", "WineLogo", FALSE);
+	  if(ptr != NULL)
+	  {
+	  	size_t len = strlen(ptr) + 1;
+			wined3d_settings.logo = malloc(len);
+			if(!wined3d_settings.logo)
+			{
+				ERR("Failed to allocate logo path memory.\n");
+			}
+			else
+			{
+				memcpy(wined3d_settings.logo, ptr, len);
+			}
+	  }
+
+	  if(strcmp(vmhal_setup_str("wine", "Multisampling", TRUE), "disabled") == 0)
+	  {
+	  	wined3d_settings.allow_multisampling = FALSE;
+	  }
+	  
+	  if(strcmp(vmhal_setup_str("wine", "StrictDrawOrdering", TRUE), "enabled") == 0)
+	  {
+	  	wined3d_settings.strict_draw_ordering = TRUE;
+	  }
+	  
+	  if(strcmp(vmhal_setup_str("wine", "AlwaysOffscreen", TRUE), "disabled") == 0)
+	  {
+	  	wined3d_settings.always_offscreen = TRUE;
+	  }
+	  
+	  if(strcmp(vmhal_setup_str("wine", "CheckFloatConstants", TRUE), "enabled") == 0)
+	  {
+	  	wined3d_settings.check_float_constants = TRUE;
+	  }
+
+	  if(strcmp(vmhal_setup_str("wine", "DirectDrawRenderer", TRUE), "gdi") == 0)
+	  {
+	  	wined3d_settings.no_3d = TRUE;
+	  }
+	  
+	  if(strcmp(vmhal_setup_str("wine", "HideCursor", TRUE), "enabled") == 0)
+	  {
+	  	wined3d_settings.hide_sys_cursor = TRUE;
+	  }
+
+	  if(vmhal_setup_str("wine", "MaxShaderModelVS", FALSE) != NULL)
+	  {
+	  	wined3d_settings.max_sm_vs = vmhal_setup_dw("wine", "MaxShaderModelVS");
+	  }
+
+	  if(vmhal_setup_str("wine", "MaxShaderModelGS", FALSE) != NULL)
+	  {
+	  	wined3d_settings.max_sm_gs = vmhal_setup_dw("wine", "MaxShaderModelGS");
+	  }
+
+	  if(vmhal_setup_str("wine", "MaxShaderModelPS", FALSE) != NULL)
+	  {
+	  	wined3d_settings.max_sm_ps = vmhal_setup_dw("wine", "MaxShaderModelPS");
 	  }
 
 #ifdef USE_HOOKS

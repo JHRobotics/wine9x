@@ -164,6 +164,7 @@ LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			{
 				case WM_CONTEXTMENU:
 				case WM_RBUTTONDOWN:
+				case WM_LBUTTONDOWN:
 				{
 					HMENU menu = CreatePopupMenu();
 					POINT point;
