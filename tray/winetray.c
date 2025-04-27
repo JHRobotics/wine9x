@@ -11,6 +11,7 @@
 
 #include "nocrt.h"
 
+#define CLSMAX 256
 #define WND_TRAY_CLASS_NAME "WINETRAYCLS"
 
 #define WM_NOTIFYMSG (WM_USER + 1)
@@ -269,9 +270,33 @@ LRESULT CALLBACK winproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
+static BOOL CALLBACK kill_tray_windows(HWND hwnd, LPARAM lParam)
+{
+	static char cls_name[CLSMAX];
+
+	if(GetClassName(hwnd, cls_name, CLSMAX) != 0)
+	{
+		if(stricmp(WND_TRAY_CLASS_NAME, cls_name) == 0)
+		{
+			SendMessage(hwnd, WM_DESTROY, 0, 0);
+		}
+	}
+
+	return TRUE;
+}
+
 int main(int argc, char **argv)
 {
 	HINSTANCE hInst = GetModuleHandle(NULL);
+	int i;
+	for(i = 1; i < argc; i++)
+	{
+		if(stricmp(argv[i], "/kill") == 0)
+		{
+			EnumWindows(kill_tray_windows, 0);
+			return EXIT_SUCCESS;
+		}
+	}
 
 	if(CoInitialize(NULL) != S_OK)
 	{

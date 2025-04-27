@@ -11,9 +11,12 @@
 
 #include "../compact/wine9x.h"
 
-TRAY_ICON_RED ICON "red_2.ico"
-TRAY_ICON_GREEN ICON "green_2.ico"
-TRAY_ICON_GRAY ICON "gray_2.ico"
+ICON_MAIN ICON "red_2.ico"
+
+/* task icons can be only 4bpp on 9x */
+TRAY_ICON_RED ICON "monred.ico"
+TRAY_ICON_GREEN ICON "mongreen.ico"
+TRAY_ICON_GRAY ICON "mongray.ico"
 
 1 VERSIONINFO
 FILEVERSION WINE9X_VERSION_NUM

@@ -1,6 +1,7 @@
-#define TRAY_ICON_GRAY 103
-#define TRAY_ICON_GREEN 102
-#define TRAY_ICON_RED 101
+#define TRAY_ICON_GRAY 104
+#define TRAY_ICON_GREEN 103
+#define TRAY_ICON_RED 102
+#define ICON_MAIN 101
 
 #define ID_CLOSE 1
 #define ID_ENABLE 2
