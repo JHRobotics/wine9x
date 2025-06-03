@@ -220,7 +220,7 @@ TARGETS := winedd.dll wined8.dll wined9.dll
 TARGETS += ddraw_95.dll ddraw_98.dll ddraw_xp.dll
 TARGETS += d3d8_95.dll d3d8_98.dll d3d8_xp.dll
 TARGETS += d3d9_98.dll d3d9_xp.dll
-TARGETS += winetray.exe
+#TARGETS += winetray.exe
 
 all: $(TARGETS)
 .PHONY: all clean
