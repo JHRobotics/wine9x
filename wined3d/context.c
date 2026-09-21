@@ -1548,8 +1548,14 @@ struct wined3d_context *context_create(struct wined3d_swapchain *swapchain,
     DWORD state;
     HDC hdc = 0;
     BOOL hdc_is_private = FALSE;
+    const struct wined3d_context *current_context = context_get_current();
+    HGLRC app_gl_ctx = wglGetCurrentContext();
+    HDC app_dc = wglGetCurrentDC();
 
     TRACE("swapchain %p, target %p, window %p.\n", swapchain, target, swapchain->win_handle);
+
+    if (current_context && current_context->glCtx == app_gl_ctx)
+        app_gl_ctx = NULL;
 
     ret = calloc(1, sizeof(*ret));
     if (!ret)
@@ -1687,6 +1693,12 @@ struct wined3d_context *context_create(struct wined3d_swapchain *swapchain,
     ret->gl_info = gl_info;
 
     context_enter(ret);
+    /* wglMakeCurrent(hdc, NULL) above released the application's context, restore it on release */
+    if (app_gl_ctx && !ret->restore_ctx)
+    {
+        ret->restore_ctx = app_gl_ctx;
+        ret->restore_dc = app_dc;
+    }
 
 #ifndef WIN32_NATIVE
     if (!context_set_pixel_format(ret, hdc, hdc_is_private, pixel_format))
