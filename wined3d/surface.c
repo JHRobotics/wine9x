@@ -32,6 +32,10 @@
 #ifdef VBOX_WITH_WINE_FIXES
 # include <float.h>
 #endif
+#if defined(__SSE2__) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
+# include <emmintrin.h>
+# define DXT1_ENCODE_SSE2
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(d3d_surface);
 WINE_DECLARE_DEBUG_CHANNEL(d3d_perf);
@@ -2649,6 +2653,518 @@ static void convert_dxt3_a4r4g4b4(const BYTE *src, BYTE *dst,
 }
 
 
+/* DXT1 encoder for blits onto compressed surfaces, e.g. Descent 3 fills its DXT1 textures with Blt() from 16 bpp surfaces. */
+#define DXT1_BLOCK_DIMENSION 4
+#define DXT1_BLOCK_TEXEL_COUNT 16
+#define DXT1_BLOCK_BYTE_COUNT 8
+#define DXT1_COLOR_CHANNEL_COUNT 3
+#define DXT1_FOUR_COLOR_PALETTE_COUNT 4
+#define DXT1_THREE_COLOR_PALETTE_COUNT 3
+#define DXT1_TRANSPARENT_INDEX 3
+#define DXT1_ALL_TRANSPARENT_INDICES 0xffffffffu
+#define DXT1_INDEX_BIT_COUNT 2
+#define DXT1_OPAQUE_ALPHA_BIT 0x80
+#define DXT1_ENDPOINT_INSET_SHIFT 4
+#define DXT1_5BIT_MAXIMUM 31
+#define DXT1_6BIT_MAXIMUM 63
+#define DXT1_8BIT_MAXIMUM 255
+
+struct dxt1_block_texels
+{
+    BYTE red[DXT1_BLOCK_TEXEL_COUNT];
+    BYTE green[DXT1_BLOCK_TEXEL_COUNT];
+    BYTE blue[DXT1_BLOCK_TEXEL_COUNT];
+    BYTE alpha[DXT1_BLOCK_TEXEL_COUNT];
+};
+
+typedef void (*dxt1_read_texel_func)(const BYTE *texel, BYTE *rgba);
+
+static inline BYTE dxt1_expand_4bit(BYTE value)
+{
+    return value << 4 | value;
+}
+
+static inline BYTE dxt1_expand_5bit(BYTE value)
+{
+    return value << 3 | value >> 2;
+}
+
+static inline BYTE dxt1_expand_6bit(BYTE value)
+{
+    return value << 2 | value >> 4;
+}
+
+static void dxt1_read_a1r5g5b5(const BYTE *texel, BYTE *rgba)
+{
+    WORD value = texel[0] | texel[1] << 8;
+    BYTE red = value >> 10 & 0x1f;
+    BYTE green = value >> 5 & 0x1f;
+    BYTE blue = value & 0x1f;
+
+    rgba[0] = dxt1_expand_5bit(red);
+    rgba[1] = dxt1_expand_5bit(green);
+    rgba[2] = dxt1_expand_5bit(blue);
+    rgba[3] = (value & 0x8000) ? 0xff : 0x00;
+}
+
+static void dxt1_read_x1r5g5b5(const BYTE *texel, BYTE *rgba)
+{
+    dxt1_read_a1r5g5b5(texel, rgba);
+    rgba[3] = 0xff;
+}
+
+static void dxt1_read_r5g6b5(const BYTE *texel, BYTE *rgba)
+{
+    WORD value = texel[0] | texel[1] << 8;
+    BYTE red = value >> 11 & 0x1f;
+    BYTE green = value >> 5 & 0x3f;
+    BYTE blue = value & 0x1f;
+
+    rgba[0] = dxt1_expand_5bit(red);
+    rgba[1] = dxt1_expand_6bit(green);
+    rgba[2] = dxt1_expand_5bit(blue);
+    rgba[3] = 0xff;
+}
+
+static void dxt1_read_a4r4g4b4(const BYTE *texel, BYTE *rgba)
+{
+    WORD value = texel[0] | texel[1] << 8;
+    BYTE alpha = value >> 12 & 0xf;
+    BYTE red = value >> 8 & 0xf;
+    BYTE green = value >> 4 & 0xf;
+    BYTE blue = value & 0xf;
+
+    rgba[0] = dxt1_expand_4bit(red);
+    rgba[1] = dxt1_expand_4bit(green);
+    rgba[2] = dxt1_expand_4bit(blue);
+    rgba[3] = dxt1_expand_4bit(alpha);
+}
+
+static void dxt1_read_a8r8g8b8(const BYTE *texel, BYTE *rgba)
+{
+    rgba[0] = texel[2];
+    rgba[1] = texel[1];
+    rgba[2] = texel[0];
+    rgba[3] = texel[3];
+}
+
+static void dxt1_read_x8r8g8b8(const BYTE *texel, BYTE *rgba)
+{
+    dxt1_read_a8r8g8b8(texel, rgba);
+    rgba[3] = 0xff;
+}
+
+/* Blocks at the right and bottom edge repeat the last column and row. */
+static void dxt1_fetch_block(const BYTE *src, DWORD pitch_in, unsigned int w, unsigned int h, unsigned int block_left, unsigned int block_top, unsigned int texel_byte_count, dxt1_read_texel_func read_texel, struct dxt1_block_texels *texels)
+{
+    unsigned int last_column = w - 1;
+    unsigned int last_row = h - 1;
+    unsigned int x, y;
+    BYTE rgba[4];
+
+    for (y = 0; y < DXT1_BLOCK_DIMENSION; ++y)
+    {
+        unsigned int unclamped_row = block_top + y;
+        unsigned int source_row = unclamped_row < last_row ? unclamped_row : last_row;
+        const BYTE *row_data = src + source_row * pitch_in;
+
+        for (x = 0; x < DXT1_BLOCK_DIMENSION; ++x)
+        {
+            unsigned int unclamped_column = block_left + x;
+            unsigned int source_column = unclamped_column < last_column ? unclamped_column : last_column;
+            unsigned int texel_index = y * DXT1_BLOCK_DIMENSION + x;
+
+            read_texel(row_data + source_column * texel_byte_count, rgba);
+            texels->red[texel_index] = rgba[0];
+            texels->green[texel_index] = rgba[1];
+            texels->blue[texel_index] = rgba[2];
+            texels->alpha[texel_index] = rgba[3];
+        }
+    }
+}
+
+static WORD dxt1_quantize_rgb565(const BYTE *rgb)
+{
+    const unsigned int rounding = DXT1_8BIT_MAXIMUM / 2;
+    WORD red = (rgb[0] * DXT1_5BIT_MAXIMUM + rounding) / DXT1_8BIT_MAXIMUM;
+    WORD green = (rgb[1] * DXT1_6BIT_MAXIMUM + rounding) / DXT1_8BIT_MAXIMUM;
+    WORD blue = (rgb[2] * DXT1_5BIT_MAXIMUM + rounding) / DXT1_8BIT_MAXIMUM;
+
+    return red << 11 | green << 5 | blue;
+}
+
+static void dxt1_expand_rgb565(WORD color, BYTE *rgb)
+{
+    BYTE red = color >> 11 & 0x1f;
+    BYTE green = color >> 5 & 0x3f;
+    BYTE blue = color & 0x1f;
+
+    rgb[0] = dxt1_expand_5bit(red);
+    rgb[1] = dxt1_expand_6bit(green);
+    rgb[2] = dxt1_expand_5bit(blue);
+}
+
+/* Same palette as the decoder: color0 <= color1 selects the three color mode with a transparent fourth entry. */
+static unsigned int dxt1_build_palette(WORD color0, WORD color1, BYTE palette[DXT1_FOUR_COLOR_PALETTE_COUNT][DXT1_COLOR_CHANNEL_COUNT])
+{
+    unsigned int channel;
+
+    dxt1_expand_rgb565(color0, palette[0]);
+    dxt1_expand_rgb565(color1, palette[1]);
+
+    if (color0 <= color1)
+    {
+        for (channel = 0; channel < DXT1_COLOR_CHANNEL_COUNT; ++channel)
+            palette[2][channel] = (palette[0][channel] + palette[1][channel]) / 2;
+        return DXT1_THREE_COLOR_PALETTE_COUNT;
+    }
+
+    for (channel = 0; channel < DXT1_COLOR_CHANNEL_COUNT; ++channel)
+    {
+        palette[2][channel] = (2 * palette[0][channel] + palette[1][channel]) / 3;
+        palette[3][channel] = (palette[0][channel] + 2 * palette[1][channel]) / 3;
+    }
+    return DXT1_FOUR_COLOR_PALETTE_COUNT;
+}
+
+#ifdef DXT1_ENCODE_SSE2
+
+static inline BYTE dxt1_horizontal_minimum(__m128i values)
+{
+    __m128i shifted = _mm_srli_si128(values, DXT1_BLOCK_TEXEL_COUNT / 2);
+    __m128i folded = _mm_min_epu8(values, shifted);
+    int lowest;
+
+    shifted = _mm_srli_si128(folded, DXT1_BLOCK_TEXEL_COUNT / 4);
+    folded = _mm_min_epu8(folded, shifted);
+    shifted = _mm_srli_si128(folded, DXT1_BLOCK_TEXEL_COUNT / 8);
+    folded = _mm_min_epu8(folded, shifted);
+    shifted = _mm_srli_si128(folded, DXT1_BLOCK_TEXEL_COUNT / 16);
+    folded = _mm_min_epu8(folded, shifted);
+    lowest = _mm_cvtsi128_si32(folded);
+    return lowest & 0xff;
+}
+
+static inline BYTE dxt1_horizontal_maximum(__m128i values)
+{
+    __m128i shifted = _mm_srli_si128(values, DXT1_BLOCK_TEXEL_COUNT / 2);
+    __m128i folded = _mm_max_epu8(values, shifted);
+    int highest;
+
+    shifted = _mm_srli_si128(folded, DXT1_BLOCK_TEXEL_COUNT / 4);
+    folded = _mm_max_epu8(folded, shifted);
+    shifted = _mm_srli_si128(folded, DXT1_BLOCK_TEXEL_COUNT / 8);
+    folded = _mm_max_epu8(folded, shifted);
+    shifted = _mm_srli_si128(folded, DXT1_BLOCK_TEXEL_COUNT / 16);
+    folded = _mm_max_epu8(folded, shifted);
+    highest = _mm_cvtsi128_si32(folded);
+    return highest & 0xff;
+}
+
+/* Transparent texels do not take part in the endpoints: all ones for the minimum, all zeros for the maximum. */
+static unsigned int dxt1_find_endpoints(const struct dxt1_block_texels *texels, BYTE *minimum, BYTE *maximum)
+{
+    const __m128i opaque_bit = _mm_set1_epi8((char)DXT1_OPAQUE_ALPHA_BIT);
+    const __m128i zero = _mm_setzero_si128();
+    const BYTE *channels[DXT1_COLOR_CHANNEL_COUNT];
+    __m128i alpha, opaque_bits, transparent_mask, values, values_for_minimum, values_for_maximum;
+    unsigned int transparent_bits, transparent_count = 0;
+    unsigned int texel, channel;
+
+    channels[0] = texels->red;
+    channels[1] = texels->green;
+    channels[2] = texels->blue;
+
+    alpha = _mm_loadu_si128((const __m128i *)texels->alpha);
+    opaque_bits = _mm_and_si128(alpha, opaque_bit);
+    transparent_mask = _mm_cmpeq_epi8(opaque_bits, zero);
+    transparent_bits = _mm_movemask_epi8(transparent_mask);
+    for (texel = 0; texel < DXT1_BLOCK_TEXEL_COUNT; ++texel)
+        transparent_count += transparent_bits >> texel & 1;
+
+    for (channel = 0; channel < DXT1_COLOR_CHANNEL_COUNT; ++channel)
+    {
+        values = _mm_loadu_si128((const __m128i *)channels[channel]);
+        values_for_minimum = _mm_or_si128(values, transparent_mask);
+        values_for_maximum = _mm_andnot_si128(transparent_mask, values);
+        minimum[channel] = dxt1_horizontal_minimum(values_for_minimum);
+        maximum[channel] = dxt1_horizontal_maximum(values_for_maximum);
+    }
+
+    return transparent_count;
+}
+
+static inline __m128i dxt1_absolute_difference(__m128i values, BYTE reference_value)
+{
+    __m128i reference = _mm_set1_epi8((char)reference_value);
+    __m128i above = _mm_subs_epu8(values, reference);
+    __m128i below = _mm_subs_epu8(reference, values);
+
+    return _mm_or_si128(above, below);
+}
+
+/* Sum of absolute differences of all 16 texels to one palette entry, as 16 bit values in two halves. */
+static inline void dxt1_palette_distance(__m128i red, __m128i green, __m128i blue, const BYTE *color, __m128i *distance_low, __m128i *distance_high)
+{
+    const __m128i zero = _mm_setzero_si128();
+    __m128i red_difference = dxt1_absolute_difference(red, color[0]);
+    __m128i green_difference = dxt1_absolute_difference(green, color[1]);
+    __m128i blue_difference = dxt1_absolute_difference(blue, color[2]);
+    __m128i red_low = _mm_unpacklo_epi8(red_difference, zero);
+    __m128i red_high = _mm_unpackhi_epi8(red_difference, zero);
+    __m128i green_low = _mm_unpacklo_epi8(green_difference, zero);
+    __m128i green_high = _mm_unpackhi_epi8(green_difference, zero);
+    __m128i blue_low = _mm_unpacklo_epi8(blue_difference, zero);
+    __m128i blue_high = _mm_unpackhi_epi8(blue_difference, zero);
+    __m128i red_green_low = _mm_add_epi16(red_low, green_low);
+    __m128i red_green_high = _mm_add_epi16(red_high, green_high);
+
+    *distance_low = _mm_add_epi16(red_green_low, blue_low);
+    *distance_high = _mm_add_epi16(red_green_high, blue_high);
+}
+
+static inline __m128i dxt1_blend(__m128i mask, __m128i if_set, __m128i if_clear)
+{
+    __m128i selected = _mm_and_si128(mask, if_set);
+    __m128i kept = _mm_andnot_si128(mask, if_clear);
+
+    return _mm_or_si128(selected, kept);
+}
+
+/* The closest palette entry per texel, the lowest index on a tie. */
+static DWORD dxt1_select_indices(const struct dxt1_block_texels *texels, const BYTE palette[DXT1_FOUR_COLOR_PALETTE_COUNT][DXT1_COLOR_CHANNEL_COUNT], unsigned int palette_count)
+{
+    const unsigned int half_texel_count = DXT1_BLOCK_TEXEL_COUNT / 2;
+    __m128i red, green, blue, best_low, best_high, index_low, index_high;
+    WORD selected_low[DXT1_BLOCK_TEXEL_COUNT / 2], selected_high[DXT1_BLOCK_TEXEL_COUNT / 2];
+    DWORD indices = 0;
+    unsigned int entry, texel;
+
+    red = _mm_loadu_si128((const __m128i *)texels->red);
+    green = _mm_loadu_si128((const __m128i *)texels->green);
+    blue = _mm_loadu_si128((const __m128i *)texels->blue);
+
+    dxt1_palette_distance(red, green, blue, palette[0], &best_low, &best_high);
+    index_low = _mm_setzero_si128();
+    index_high = _mm_setzero_si128();
+
+    for (entry = 1; entry < palette_count; ++entry)
+    {
+        __m128i distance_low, distance_high, closer_low, closer_high, entry_value;
+
+        dxt1_palette_distance(red, green, blue, palette[entry], &distance_low, &distance_high);
+        closer_low = _mm_cmpgt_epi16(best_low, distance_low);
+        closer_high = _mm_cmpgt_epi16(best_high, distance_high);
+        best_low = _mm_min_epi16(best_low, distance_low);
+        best_high = _mm_min_epi16(best_high, distance_high);
+        entry_value = _mm_set1_epi16((short)entry);
+        index_low = dxt1_blend(closer_low, entry_value, index_low);
+        index_high = dxt1_blend(closer_high, entry_value, index_high);
+    }
+
+    _mm_storeu_si128((__m128i *)selected_low, index_low);
+    _mm_storeu_si128((__m128i *)selected_high, index_high);
+
+    for (texel = 0; texel < DXT1_BLOCK_TEXEL_COUNT; ++texel)
+    {
+        unsigned int shift = texel * DXT1_INDEX_BIT_COUNT;
+        DWORD entry_index = texel < half_texel_count ? selected_low[texel] : selected_high[texel - half_texel_count];
+
+        if (!(texels->alpha[texel] & DXT1_OPAQUE_ALPHA_BIT))
+            entry_index = DXT1_TRANSPARENT_INDEX;
+        indices |= entry_index << shift;
+    }
+
+    return indices;
+}
+
+#else
+
+static unsigned int dxt1_find_endpoints(const struct dxt1_block_texels *texels, BYTE *minimum, BYTE *maximum)
+{
+    const BYTE *channels[DXT1_COLOR_CHANNEL_COUNT];
+    unsigned int transparent_count = 0;
+    unsigned int texel, channel;
+
+    channels[0] = texels->red;
+    channels[1] = texels->green;
+    channels[2] = texels->blue;
+
+    for (channel = 0; channel < DXT1_COLOR_CHANNEL_COUNT; ++channel)
+    {
+        minimum[channel] = DXT1_8BIT_MAXIMUM;
+        maximum[channel] = 0;
+    }
+
+    for (texel = 0; texel < DXT1_BLOCK_TEXEL_COUNT; ++texel)
+    {
+        if (!(texels->alpha[texel] & DXT1_OPAQUE_ALPHA_BIT))
+        {
+            ++transparent_count;
+            continue;
+        }
+
+        for (channel = 0; channel < DXT1_COLOR_CHANNEL_COUNT; ++channel)
+        {
+            BYTE value = channels[channel][texel];
+
+            if (value < minimum[channel])
+                minimum[channel] = value;
+            if (value > maximum[channel])
+                maximum[channel] = value;
+        }
+    }
+
+    return transparent_count;
+}
+
+static DWORD dxt1_select_indices(const struct dxt1_block_texels *texels, const BYTE palette[DXT1_FOUR_COLOR_PALETTE_COUNT][DXT1_COLOR_CHANNEL_COUNT], unsigned int palette_count)
+{
+    DWORD indices = 0;
+    unsigned int entry, texel;
+
+    for (texel = 0; texel < DXT1_BLOCK_TEXEL_COUNT; ++texel)
+    {
+        unsigned int shift = texel * DXT1_INDEX_BIT_COUNT;
+        unsigned int best_entry = 0;
+        unsigned int best_distance = ~0u;
+
+        if (!(texels->alpha[texel] & DXT1_OPAQUE_ALPHA_BIT))
+        {
+            indices |= (DWORD)DXT1_TRANSPARENT_INDEX << shift;
+            continue;
+        }
+
+        for (entry = 0; entry < palette_count; ++entry)
+        {
+            int red_difference = texels->red[texel] - palette[entry][0];
+            int green_difference = texels->green[texel] - palette[entry][1];
+            int blue_difference = texels->blue[texel] - palette[entry][2];
+            unsigned int red_distance = red_difference < 0 ? -red_difference : red_difference;
+            unsigned int green_distance = green_difference < 0 ? -green_difference : green_difference;
+            unsigned int blue_distance = blue_difference < 0 ? -blue_difference : blue_difference;
+            unsigned int distance = red_distance + green_distance + blue_distance;
+
+            if (distance < best_distance)
+            {
+                best_distance = distance;
+                best_entry = entry;
+            }
+        }
+
+        indices |= (DWORD)best_entry << shift;
+    }
+
+    return indices;
+}
+
+#endif
+
+static void dxt1_encode_block(const struct dxt1_block_texels *texels, BYTE *block)
+{
+    BYTE minimum[DXT1_COLOR_CHANNEL_COUNT], maximum[DXT1_COLOR_CHANNEL_COUNT];
+    BYTE palette[DXT1_FOUR_COLOR_PALETTE_COUNT][DXT1_COLOR_CHANNEL_COUNT];
+    WORD color0, color1, minimum_color, maximum_color;
+    unsigned int transparent_count, palette_count, channel;
+    DWORD indices;
+
+    transparent_count = dxt1_find_endpoints(texels, minimum, maximum);
+
+    if (transparent_count == DXT1_BLOCK_TEXEL_COUNT)
+    {
+        color0 = 0;
+        color1 = 0;
+        indices = DXT1_ALL_TRANSPARENT_INDICES;
+    }
+    else
+    {
+        for (channel = 0; channel < DXT1_COLOR_CHANNEL_COUNT; ++channel)
+        {
+            BYTE inset = (maximum[channel] - minimum[channel]) >> DXT1_ENDPOINT_INSET_SHIFT;
+
+            minimum[channel] += inset;
+            maximum[channel] -= inset;
+        }
+
+        minimum_color = dxt1_quantize_rgb565(minimum);
+        maximum_color = dxt1_quantize_rgb565(maximum);
+
+        /* Transparent texels need the three color mode, opaque blocks get the four color mode. */
+        if (transparent_count)
+        {
+            color0 = minimum_color;
+            color1 = maximum_color;
+        }
+        else
+        {
+            color0 = maximum_color;
+            color1 = minimum_color;
+        }
+
+        palette_count = dxt1_build_palette(color0, color1, palette);
+        indices = dxt1_select_indices(texels, palette, palette_count);
+    }
+
+    block[0] = color0 & 0xff;
+    block[1] = color0 >> 8;
+    block[2] = color1 & 0xff;
+    block[3] = color1 >> 8;
+    block[4] = indices & 0xff;
+    block[5] = indices >> 8 & 0xff;
+    block[6] = indices >> 16 & 0xff;
+    block[7] = indices >> 24 & 0xff;
+}
+
+static void convert_to_dxt1(const BYTE *src, BYTE *dst, DWORD pitch_in, DWORD pitch_out, unsigned int w, unsigned int h, unsigned int texel_byte_count, dxt1_read_texel_func read_texel)
+{
+    struct dxt1_block_texels texels;
+    unsigned int block_left, block_top;
+
+    TRACE("Converting %ux%u pixels, pitches %u %u\n", w, h, pitch_in, pitch_out);
+
+    for (block_top = 0; block_top < h; block_top += DXT1_BLOCK_DIMENSION)
+    {
+        BYTE *block = dst + (block_top / DXT1_BLOCK_DIMENSION) * pitch_out;
+
+        for (block_left = 0; block_left < w; block_left += DXT1_BLOCK_DIMENSION)
+        {
+            dxt1_fetch_block(src, pitch_in, w, h, block_left, block_top, texel_byte_count, read_texel, &texels);
+            dxt1_encode_block(&texels, block);
+            block += DXT1_BLOCK_BYTE_COUNT;
+        }
+    }
+}
+
+static void convert_a1r5g5b5_dxt1(const BYTE *src, BYTE *dst, DWORD pitch_in, DWORD pitch_out, unsigned int w, unsigned int h)
+{
+    convert_to_dxt1(src, dst, pitch_in, pitch_out, w, h, sizeof(WORD), dxt1_read_a1r5g5b5);
+}
+
+static void convert_x1r5g5b5_dxt1(const BYTE *src, BYTE *dst, DWORD pitch_in, DWORD pitch_out, unsigned int w, unsigned int h)
+{
+    convert_to_dxt1(src, dst, pitch_in, pitch_out, w, h, sizeof(WORD), dxt1_read_x1r5g5b5);
+}
+
+static void convert_r5g6b5_dxt1(const BYTE *src, BYTE *dst, DWORD pitch_in, DWORD pitch_out, unsigned int w, unsigned int h)
+{
+    convert_to_dxt1(src, dst, pitch_in, pitch_out, w, h, sizeof(WORD), dxt1_read_r5g6b5);
+}
+
+static void convert_a4r4g4b4_dxt1(const BYTE *src, BYTE *dst, DWORD pitch_in, DWORD pitch_out, unsigned int w, unsigned int h)
+{
+    convert_to_dxt1(src, dst, pitch_in, pitch_out, w, h, sizeof(WORD), dxt1_read_a4r4g4b4);
+}
+
+static void convert_a8r8g8b8_dxt1(const BYTE *src, BYTE *dst, DWORD pitch_in, DWORD pitch_out, unsigned int w, unsigned int h)
+{
+    convert_to_dxt1(src, dst, pitch_in, pitch_out, w, h, sizeof(DWORD), dxt1_read_a8r8g8b8);
+}
+
+static void convert_x8r8g8b8_dxt1(const BYTE *src, BYTE *dst, DWORD pitch_in, DWORD pitch_out, unsigned int w, unsigned int h)
+{
+    convert_to_dxt1(src, dst, pitch_in, pitch_out, w, h, sizeof(DWORD), dxt1_read_x8r8g8b8);
+}
+
 struct d3dfmt_converter_desc
 {
     enum wined3d_format_id from, to;
@@ -2666,6 +3182,12 @@ static const struct d3dfmt_converter_desc converters[] =
     {WINED3DFMT_DXT1,           WINED3DFMT_B4G4R4A4_UNORM,  convert_dxt1_a4r4g4b4},
     {WINED3DFMT_DXT1,           WINED3DFMT_B5G5R5X1_UNORM,  convert_dxt1_x1r5g5b5},
     {WINED3DFMT_DXT3,           WINED3DFMT_B4G4R4A4_UNORM,  convert_dxt3_a4r4g4b4},
+    {WINED3DFMT_B5G5R5A1_UNORM, WINED3DFMT_DXT1,            convert_a1r5g5b5_dxt1},
+    {WINED3DFMT_B5G5R5X1_UNORM, WINED3DFMT_DXT1,            convert_x1r5g5b5_dxt1},
+    {WINED3DFMT_B5G6R5_UNORM,   WINED3DFMT_DXT1,            convert_r5g6b5_dxt1},
+    {WINED3DFMT_B4G4R4A4_UNORM, WINED3DFMT_DXT1,            convert_a4r4g4b4_dxt1},
+    {WINED3DFMT_B8G8R8A8_UNORM, WINED3DFMT_DXT1,            convert_a8r8g8b8_dxt1},
+    {WINED3DFMT_B8G8R8X8_UNORM, WINED3DFMT_DXT1,            convert_x8r8g8b8_dxt1},
 };
 
 static inline const struct d3dfmt_converter_desc *find_converter(enum wined3d_format_id from,

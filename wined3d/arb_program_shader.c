@@ -7811,6 +7811,12 @@ static BOOL arbfp_blit_supported(const struct wined3d_gl_info *gl_info,
     if (src_pool == WINED3D_POOL_SYSTEM_MEM || dst_pool == WINED3D_POOL_SYSTEM_MEM)
         return FALSE;
 
+    if (dst_format->flags[WINED3D_GL_RES_TYPE_TEX_2D] & WINED3DFMT_FLAG_COMPRESSED)
+    {
+        TRACE("Cannot render into a compressed destination.\n");
+        return FALSE;
+    }
+
     src_fixup = get_complex_fixup(src_format->color_fixup);
     if (TRACE_ON(d3d_shader) && TRACE_ON(d3d))
     {
