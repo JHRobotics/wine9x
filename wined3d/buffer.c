@@ -1396,6 +1396,9 @@ static HRESULT buffer_init(struct wined3d_buffer *buffer, struct wined3d_device 
     }
 
     dynamic_buffer_ok = gl_info->supported[APPLE_FLUSH_BUFFER_RANGE] || gl_info->supported[ARB_MAP_BUFFER_RANGE];
+    /* Every map of a buffer object is a synchronous round trip on a passthrough driver. */
+    if (!wined3d_settings.dynamic_buffer_objects)
+        dynamic_buffer_ok = FALSE;
 
     /* Observations show that drawStridedSlow is faster on dynamic VBs than converting +
      * drawStridedFast (half-life 2 and others).

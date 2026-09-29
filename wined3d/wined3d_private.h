@@ -291,6 +291,7 @@ struct wined3d_settings
     BOOL vertex_array_brga_broken;
    	BOOL check_float_constants;
    	BOOL hide_sys_cursor;
+    BOOL dynamic_buffer_objects;
 };
 
 extern struct wined3d_settings wined3d_settings DECLSPEC_HIDDEN;

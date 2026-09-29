@@ -113,6 +113,7 @@ struct wined3d_settings wined3d_settings =
     FALSE,          /* VERTEX_ARRAY_BRGA is OK on most cases */
     FALSE,          /* CheckFloatConstants disabled by default */
     FALSE,          /* system cursor is visible or hidden by application */
+    TRUE,           /* Dynamic buffers may use buffer objects. */
 };
 
 struct wined3d * CDECL wined3d_create(DWORD flags)
@@ -437,6 +438,13 @@ static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
               	wined3d_settings.hide_sys_cursor = TRUE;
               }
           }
+
+          if (!get_config_key(hkey, appkey, "DynamicBufferObjects", buffer, size)
+                && !strcmp(buffer, "disabled"))
+          {
+              TRACE("Keeping dynamic buffers in system memory.\n");
+              wined3d_settings.dynamic_buffer_objects = FALSE;
+          }
 	        
 	    }
 	
@@ -529,6 +537,11 @@ static BOOL wined3d_dll_init(HINSTANCE hInstDLL)
 	  if(strcmp(vmhal_setup_str("wine", "HideCursor", TRUE), "enabled") == 0)
 	  {
 	  	wined3d_settings.hide_sys_cursor = TRUE;
+	  }
+
+	  if(strcmp(vmhal_setup_str("wine", "DynamicBufferObjects", TRUE), "disabled") == 0)
+	  {
+	  	wined3d_settings.dynamic_buffer_objects = FALSE;
 	  }
 
 	  if(vmhal_setup_str("wine", "MaxShaderModelVS", FALSE) != NULL)
