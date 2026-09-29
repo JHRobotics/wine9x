@@ -4517,7 +4517,8 @@ HRESULT CDECL wined3d_set_adapter_display_mode(struct wined3d *wined3d,
     }
     else if (current_mode.dmPelsWidth == new_mode.dmPelsWidth
             && current_mode.dmPelsHeight == new_mode.dmPelsHeight
-            && current_mode.dmBitsPerPel == new_mode.dmBitsPerPel
+            && (current_mode.dmBitsPerPel == new_mode.dmBitsPerPel
+            || pixelformat_for_depth(current_mode.dmBitsPerPel) == new_format_id)
             && (current_mode.dmDisplayFrequency == new_mode.dmDisplayFrequency
             || !(new_mode.dmFields & DM_DISPLAYFREQUENCY))
             && (DUMMYACCESS1(current_mode, u2, dmDisplayFlags) == DUMMYACCESS1(new_mode, u2, dmDisplayFlags)
@@ -4537,6 +4538,14 @@ HRESULT CDECL wined3d_set_adapter_display_mode(struct wined3d *wined3d,
             new_mode.dmDisplayFrequency = 0;
             ret = ChangeDisplaySettingsExA95(adapter->DeviceName, &new_mode, NULL, CDS_FULLSCREEN, NULL);
         }
+        if (ret != DISP_CHANGE_SUCCESSFUL && new_mode.dmBitsPerPel == 32
+                && pixelformat_for_depth(24) == new_format_id)
+        {
+            WARN("No 32 bpp mode, retrying at 24 bpp.\n");
+            new_mode.dmBitsPerPel = 24;
+            ret = ChangeDisplaySettingsExA95(adapter->DeviceName, &new_mode, NULL, CDS_FULLSCREEN, NULL);
+        }
+
         if (ret != DISP_CHANGE_SUCCESSFUL)
             return WINED3DERR_NOTAVAILABLE;
     }
