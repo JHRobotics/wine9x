@@ -1555,7 +1555,9 @@ struct wined3d_context *context_create(struct wined3d_swapchain *swapchain,
     TRACE("swapchain %p, target %p, window %p.\n", swapchain, target, swapchain->win_handle);
 
     if (current_context && current_context->glCtx == app_gl_ctx)
+    {
         app_gl_ctx = NULL;
+    }
 
     ret = calloc(1, sizeof(*ret));
     if (!ret)
