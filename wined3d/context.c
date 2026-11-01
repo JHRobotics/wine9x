@@ -3302,10 +3302,93 @@ static void context_bind_shader_resources(struct wined3d_context *context, const
     }
 }
 
+/* Whether the texture of a sampler is also one of the bound render targets. */
+static BOOL context_sampler_reads_render_target(const struct wined3d_state *state, unsigned int sampler_idx, unsigned int render_target_count)
+{
+    const struct wined3d_texture *texture = state->textures[sampler_idx];
+    unsigned int i;
+
+    if (!texture)
+    {
+        return FALSE;
+    }
+    for (i = 0; i < render_target_count; ++i)
+    {
+        const struct wined3d_rendertarget_view *view = state->fb->render_targets[i];
+
+        if (view && view->resource == &texture->resource)
+        {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+/* Whether the draw samples one of its own render targets, with the samplers context_preload_textures() picks. */
+static BOOL context_draw_reads_render_target(const struct wined3d_context *context, const struct wined3d_state *state)
+{
+    unsigned int render_target_count = context->gl_info->limits.buffers;
+    unsigned int i;
+
+    if (use_vs(state))
+    {
+        const struct wined3d_shader *vertex_shader = state->shader[WINED3D_SHADER_TYPE_VERTEX];
+
+        for (i = 0; i < MAX_VERTEX_SAMPLERS; ++i)
+        {
+            if (vertex_shader->reg_maps.resource_info[i].type && context_sampler_reads_render_target(state, MAX_FRAGMENT_SAMPLERS + i, render_target_count))
+            {
+                return TRUE;
+            }
+        }
+    }
+
+    if (use_ps(state))
+    {
+        const struct wined3d_shader *pixel_shader = state->shader[WINED3D_SHADER_TYPE_PIXEL];
+
+        for (i = 0; i < MAX_FRAGMENT_SAMPLERS; ++i)
+        {
+            if (pixel_shader->reg_maps.resource_info[i].type && context_sampler_reads_render_target(state, i, render_target_count))
+            {
+                return TRUE;
+            }
+        }
+    }
+    else
+    {
+        WORD ffu_map = context->fixed_function_usage_map;
+
+        for (i = 0; ffu_map; ffu_map >>= 1, ++i)
+        {
+            if ((ffu_map & 1) && context_sampler_reads_render_target(state, i, render_target_count))
+            {
+                return TRUE;
+            }
+        }
+    }
+    return FALSE;
+}
+
+/* GL leaves a draw that samples its own render target undefined; the barrier makes earlier writes visible to it. */
+static void context_texture_barrier(const struct wined3d_gl_info *gl_info)
+{
+    if (gl_info->supported[ARB_TEXTURE_BARRIER])
+    {
+        GL_EXTCALL(glTextureBarrier());
+    }
+    else
+    {
+        GL_EXTCALL(glTextureBarrierNV());
+    }
+    checkGLcall("glTextureBarrier");
+}
+
 /* Context activation is done by the caller. */
 BOOL context_apply_draw_state(struct wined3d_context *context, struct wined3d_device *device)
 {
     const struct wined3d_state *state = &device->state;
+    const struct wined3d_gl_info *gl_info = context->gl_info;
     const struct StateEntry *state_table = context->state_table;
     const struct wined3d_fb_state *fb = state->fb;
     unsigned int i;
@@ -3376,6 +3459,11 @@ BOOL context_apply_draw_state(struct wined3d_context *context, struct wined3d_de
     {
         context_bind_shader_resources(context, state);
         context->update_shader_resource_bindings = 0;
+    }
+
+    if ((gl_info->supported[ARB_TEXTURE_BARRIER] || gl_info->supported[NV_TEXTURE_BARRIER]) && context_draw_reads_render_target(context, state))
+    {
+        context_texture_barrier(gl_info);
     }
 
     if (wined3d_settings.offscreen_rendering_mode == ORM_FBO)

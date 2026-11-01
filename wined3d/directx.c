@@ -167,6 +167,7 @@ static const struct wined3d_extension_map gl_extension_map[] =
     {"GL_ARB_shading_language_100",         ARB_SHADING_LANGUAGE_100      },
     {"GL_ARB_shadow",                       ARB_SHADOW                    },
     {"GL_ARB_sync",                         ARB_SYNC                      },
+    {"GL_ARB_texture_barrier",              ARB_TEXTURE_BARRIER           },
     {"GL_ARB_texture_border_clamp",         ARB_TEXTURE_BORDER_CLAMP      },
     {"GL_ARB_texture_compression",          ARB_TEXTURE_COMPRESSION       },
     {"GL_ARB_texture_compression_rgtc",     ARB_TEXTURE_COMPRESSION_RGTC  },
@@ -246,6 +247,7 @@ static const struct wined3d_extension_map gl_extension_map[] =
     {"GL_NV_register_combiners",            NV_REGISTER_COMBINERS         },
     {"GL_NV_register_combiners2",           NV_REGISTER_COMBINERS2        },
     {"GL_NV_texgen_reflection",             NV_TEXGEN_REFLECTION          },
+    {"GL_NV_texture_barrier",               NV_TEXTURE_BARRIER            },
     {"GL_NV_texture_env_combine4",          NV_TEXTURE_ENV_COMBINE4       },
     {"GL_NV_texture_shader",                NV_TEXTURE_SHADER             },
     {"GL_NV_texture_shader2",               NV_TEXTURE_SHADER2            },
@@ -2781,6 +2783,8 @@ static void load_gl_funcs(struct wined3d_gl_info *gl_info)
     USE_GL_FUNC(glGetSynciv)
     USE_GL_FUNC(glIsSync)
     USE_GL_FUNC(glWaitSync)
+    /* GL_ARB_texture_barrier */
+    USE_GL_FUNC(glTextureBarrier)
     /* GL_ARB_texture_compression */
     USE_GL_FUNC(glCompressedTexImage2DARB)
     USE_GL_FUNC(glCompressedTexImage3DARB)
@@ -3056,6 +3060,8 @@ static void load_gl_funcs(struct wined3d_gl_info *gl_info)
     USE_GL_FUNC(glCombinerParameteriNV)
     USE_GL_FUNC(glCombinerParameterivNV)
     USE_GL_FUNC(glFinalCombinerInputNV)
+    /* GL_NV_texture_barrier */
+    USE_GL_FUNC(glTextureBarrierNV)
     /* WGL extensions */
     USE_GL_FUNC(wglChoosePixelFormatARB)
     USE_GL_FUNC(wglGetExtensionsStringARB)
@@ -3601,6 +3607,8 @@ static BOOL wined3d_adapter_init_gl_caps(struct wined3d_adapter *adapter)
 
         {ARB_DEBUG_OUTPUT,                 MAKEDWORD_VERSION(4, 3)},
         {ARB_INTERNALFORMAT_QUERY2,        MAKEDWORD_VERSION(4, 3)},
+
+        {ARB_TEXTURE_BARRIER,              MAKEDWORD_VERSION(4, 5)},
     };
     struct wined3d_driver_info *driver_info = &adapter->driver_info;
     const char *gl_vendor_str, *gl_renderer_str, *gl_version_str;
