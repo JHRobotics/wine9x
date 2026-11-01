@@ -36,6 +36,16 @@ static inline struct ddraw_surface *impl_from_IDirectDrawGammaControl(IDirectDra
     return CONTAINING_RECORD(iface, struct ddraw_surface, IDirectDrawGammaControl_iface);
 }
 
+/* Without a clipper and outside exclusive mode the primary is the screen itself, over every window. */
+static BOOL ddraw_surface_is_screen(const struct ddraw_surface *surface)
+{
+    if (surface->ddraw->cooperative_level & DDSCL_EXCLUSIVE)
+    {
+        return FALSE;
+    }
+    return surface->clipper == NULL;
+}
+
 /* This is slow, of course. Also, in case of locks, we can't prevent other
  * applications from drawing to the screen while we've locked the frontbuffer.
  * We'd like to do this in wined3d instead, but for that to work wined3d needs
@@ -70,7 +80,7 @@ HRESULT ddraw_surface_update_frontbuffer(struct ddraw_surface *surface, const RE
     if (w <= 0 || h <= 0)
         return DD_OK;
 
-    if (surface->ddraw->swapchain_window)
+    if (surface->ddraw->swapchain_window && !ddraw_surface_is_screen(surface))
     {
         /* Nothing to do, we control the frontbuffer, or at least the parts we
          * care about. */
