@@ -4547,7 +4547,8 @@ void surface_load_ds_location(struct wined3d_surface *surface, struct wined3d_co
         return;
     }
 
-    if (surface->locations & WINED3D_LOCATION_DISCARDED)
+    /* With always_offscreen the drawable's pixel format has no depth buffer (context_create), and every copy below reads or writes it. */
+    if ((surface->locations & WINED3D_LOCATION_DISCARDED) || wined3d_settings.always_offscreen)
     {
         TRACE("Surface was discarded, no need copy data.\n");
         wined3d_surface_prepare(surface, context, location);
