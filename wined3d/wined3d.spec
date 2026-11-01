@@ -154,6 +154,7 @@
 @ cdecl wined3d_device_set_vs_consts_i(ptr long ptr long)
 @ cdecl wined3d_device_set_vs_resource_view(ptr long ptr)
 @ cdecl wined3d_device_set_vs_sampler(ptr long ptr)
+@ cdecl wined3d_device_set_window_changes(ptr long)
 @ cdecl wined3d_device_setup_fullscreen_window(ptr ptr long long)
 @ cdecl wined3d_device_show_cursor(ptr long)
 @ cdecl wined3d_device_uninit_3d(ptr)

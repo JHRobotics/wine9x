@@ -157,6 +157,7 @@ EXPORTS
   wined3d_device_set_vs_consts_i
   wined3d_device_set_vs_resource_view
   wined3d_device_set_vs_sampler
+  wined3d_device_set_window_changes
   wined3d_device_setup_fullscreen_window
   wined3d_device_show_cursor
   wined3d_device_uninit_3d

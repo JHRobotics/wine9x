@@ -774,11 +774,12 @@ static HRESULT WINAPI ddraw1_RestoreDisplayMode(IDirectDraw *iface)
  *                DDSCL_SETFOCUSWINDOW (partially),
  *                DDSCL_MULTITHREADED (work in progress)
  *                DDSCL_FPUPRESERVE (see device.c)
+ *                DDSCL_NOWINDOWCHANGES
  *
  * Unsure about this: DDSCL_FPUSETUP
  *
  * These don't seem very important for wine:
- *  DDSCL_ALLOWREBOOT, DDSCL_NOWINDOWCHANGES, DDSCL_ALLOWMODEX
+ *  DDSCL_ALLOWREBOOT, DDSCL_ALLOWMODEX
  *
  * Returns:
  *  DD_OK if the cooperative level was set successfully
@@ -793,6 +794,7 @@ static HRESULT ddraw_set_cooperative_level(struct ddraw *ddraw, HWND window,
     struct wined3d_rendertarget_view *rtv = NULL, *dsv = NULL;
     struct wined3d_stateblock *stateblock;
     BOOL restore_state = FALSE;
+    BOOL allow_window_changes;
     HRESULT hr;
 
     TRACE("ddraw %p, window %p, flags %#x, restore_mode_on_normal %x.\n", ddraw, window, cooplevel,
@@ -909,6 +911,10 @@ static HRESULT ddraw_set_cooperative_level(struct ddraw *ddraw, HWND window,
         ddraw->devicewindow = NULL;
         ddraw->focuswindow = NULL;
     }
+
+    /* DDSCL_NOWINDOWCHANGES: the application shows and orders its window itself. */
+    allow_window_changes = !(cooplevel & DDSCL_NOWINDOWCHANGES);
+    wined3d_device_set_window_changes(ddraw->wined3d_device, allow_window_changes);
 
     if ((cooplevel & DDSCL_FULLSCREEN) != (ddraw->cooperative_level & DDSCL_FULLSCREEN) || window != ddraw->dest_window)
     {

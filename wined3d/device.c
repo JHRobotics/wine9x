@@ -771,6 +771,12 @@ void CDECL wined3d_device_setup_fullscreen_window(struct wined3d_device *device,
 
     TRACE("Setting up window %p for fullscreen mode.\n", window);
 
+    /* No window changes: style, size, visibility and Z order stay as they are. */
+    if (device->create_parms.flags & WINED3DCREATE_NOWINDOWCHANGES)
+    {
+        return;
+    }
+
     if (device->style || device->exStyle)
     {
         ERR("Changing the window style for window %p, but another style (%08x, %08x) is already stored.\n",
@@ -1190,6 +1196,21 @@ void CDECL wined3d_device_set_multithreaded(struct wined3d_device *device)
 
     /* For now just store the flag (needed in case of ddraw). */
     device->create_parms.flags |= WINED3DCREATE_MULTITHREADED;
+}
+
+/* DirectDraw passes DDSCL_NOWINDOWCHANGES from SetCooperativeLevel as D3DCREATE_NOWINDOWCHANGES. */
+void CDECL wined3d_device_set_window_changes(struct wined3d_device *device, BOOL allow_window_changes)
+{
+    TRACE("device %p, allow_window_changes %#x.\n", device, allow_window_changes);
+
+    if (allow_window_changes)
+    {
+        device->create_parms.flags &= ~WINED3DCREATE_NOWINDOWCHANGES;
+    }
+    else
+    {
+        device->create_parms.flags |= WINED3DCREATE_NOWINDOWCHANGES;
+    }
 }
 
 UINT CDECL wined3d_device_get_available_texture_mem(const struct wined3d_device *device)
