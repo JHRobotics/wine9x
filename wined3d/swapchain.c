@@ -124,6 +124,7 @@ void CDECL wined3d_swapchain_set_window(struct wined3d_swapchain *swapchain, HWN
 {
     if (!window)
         window = swapchain->device_window;
+    window = device_own_window(swapchain->device, window);
     if (window == swapchain->win_handle)
         return;
 
@@ -782,6 +783,7 @@ static HRESULT swapchain_init(struct wined3d_swapchain *swapchain, struct wined3
         swapchain->swapchain_ops = &swapchain_gl_ops;
 
     window = desc->device_window ? desc->device_window : device->create_parms.focus_window;
+    window = device_own_window(device, window);
 
     swapchain->device = device;
     swapchain->parent = parent;

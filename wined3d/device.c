@@ -764,11 +764,38 @@ static LONG fullscreen_exstyle(LONG exstyle)
     return exstyle;
 }
 
+/* A window of another process (the desktop) is neither restyled nor drawn into; the focus window takes its place. */
+HWND device_own_window(const struct wined3d_device *device, HWND window)
+{
+    HWND focus_window = device->create_parms.focus_window;
+    DWORD current_process = GetCurrentProcessId();
+    DWORD window_process = 0;
+    DWORD focus_process = 0;
+
+    if (!window || !focus_window)
+    {
+        return window;
+    }
+    GetWindowThreadProcessId(window, &window_process);
+    if (window_process == current_process)
+    {
+        return window;
+    }
+    GetWindowThreadProcessId(focus_window, &focus_process);
+    if (focus_process != current_process)
+    {
+        return window;
+    }
+    TRACE("Using focus window %p instead of window %p of another process.\n", focus_window, window);
+    return focus_window;
+}
+
 void CDECL wined3d_device_setup_fullscreen_window(struct wined3d_device *device, HWND window, UINT w, UINT h)
 {
     BOOL filter_messages;
     LONG style, exstyle;
 
+    window = device_own_window(device, window);
     TRACE("Setting up window %p for fullscreen mode.\n", window);
 
     /* No window changes: style, size, visibility and Z order stay as they are. */
@@ -809,6 +836,7 @@ void CDECL wined3d_device_restore_fullscreen_window(struct wined3d_device *devic
 
     if (!device->style && !device->exStyle) return;
 
+    window = device_own_window(device, window);
     style = GetWindowLongA(window, GWL_STYLE);
     exstyle = GetWindowLongA(window, GWL_EXSTYLE);
 
@@ -4609,7 +4637,7 @@ HRESULT CDECL wined3d_device_reset(struct wined3d_device *device,
         TRACE("Changing the device window from %p to %p.\n",
                 swapchain->desc.device_window, swapchain_desc->device_window);
         swapchain->desc.device_window = swapchain_desc->device_window;
-        swapchain->device_window = swapchain_desc->device_window;
+        swapchain->device_window = device_own_window(device, swapchain_desc->device_window);
         wined3d_swapchain_set_window(swapchain, NULL);
     }
 
