@@ -4643,11 +4643,17 @@ HRESULT CDECL wined3d_device_reset(struct wined3d_device *device,
             }
             else
             {
-                /* Fullscreen -> fullscreen mode change */
-                MoveWindow(swapchain->device_window, 0, 0,
+                /* Fullscreen -> fullscreen mode change; the app may have given the window a frame meanwhile. */
+                DWORD style = device->style;
+                DWORD exStyle = device->exStyle;
+
+                device->style = 0;
+                device->exStyle = 0;
+                wined3d_device_setup_fullscreen_window(device, swapchain->device_window,
                         swapchain_desc->backbuffer_width,
-                        swapchain_desc->backbuffer_height,
-                        TRUE);
+                        swapchain_desc->backbuffer_height);
+                device->style = style;
+                device->exStyle = exStyle;
             }
             swapchain->d3d_mode = m;
         }
