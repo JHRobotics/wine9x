@@ -982,6 +982,13 @@ static HRESULT ddraw_set_cooperative_level(struct ddraw *ddraw, HWND window,
         wined3d_stateblock_decref(stateblock);
     }
 
+    /* Release the focus window before restoring the mode: device_parent_mode_changed() would size and show the window again. */
+    if ((ddraw->cooperative_level & DDSCL_EXCLUSIVE)
+            && (window != ddraw->dest_window || !(cooplevel & DDSCL_EXCLUSIVE)))
+    {
+        wined3d_device_release_focus_window(ddraw->wined3d_device);
+    }
+
     if (!(cooplevel & DDSCL_EXCLUSIVE) && (ddraw->cooperative_level & DDSCL_EXCLUSIVE)
             && restore_mode_on_normal)
     {
@@ -989,10 +996,6 @@ static HRESULT ddraw_set_cooperative_level(struct ddraw *ddraw, HWND window,
         if (FAILED(hr))
             ERR("RestoreDisplayMode failed\n");
     }
-
-    if ((ddraw->cooperative_level & DDSCL_EXCLUSIVE)
-            && (window != ddraw->dest_window || !(cooplevel & DDSCL_EXCLUSIVE)))
-        wined3d_device_release_focus_window(ddraw->wined3d_device);
 
     if ((cooplevel & DDSCL_EXCLUSIVE)
             && (window != ddraw->dest_window || !(ddraw->cooperative_level & DDSCL_EXCLUSIVE)))
