@@ -2947,6 +2947,7 @@ struct wined3d_swapchain
     struct wined3d_palette *palette;
 
     LONG prev_time, frames;   /* Performance tracking */
+    INT64 vblank_msc;   /* last blank waited for, WGL_OML_sync_control */
 
     struct wined3d_context **context;
     unsigned int num_contexts;

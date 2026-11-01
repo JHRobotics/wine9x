@@ -2890,12 +2890,14 @@ struct opengl_funcs
         BOOL       (WINE_GLAPI *p_wglDestroyPbufferARB)(struct wgl_pbuffer *);
         void       (WINE_GLAPI *p_wglFreeMemoryNV)(void*);
         HDC        (WINE_GLAPI *p_wglGetCurrentReadDCARB)(void);
+        BOOL       (WINE_GLAPI *p_wglGetMscRateOML)(HDC,INT32*,INT32*);
         const char* (WINE_GLAPI *p_wglGetExtensionsStringARB)(HDC);
         const char* (WINE_GLAPI *p_wglGetExtensionsStringEXT)(void);
         HDC        (WINE_GLAPI *p_wglGetPbufferDCARB)(struct wgl_pbuffer *);
         BOOL       (WINE_GLAPI *p_wglGetPixelFormatAttribfvARB)(HDC,int,int,UINT,const int*,FLOAT*);
         BOOL       (WINE_GLAPI *p_wglGetPixelFormatAttribivARB)(HDC,int,int,UINT,const int*,int*);
         int        (WINE_GLAPI *p_wglGetSwapIntervalEXT)(void);
+        BOOL       (WINE_GLAPI *p_wglGetSyncValuesOML)(HDC,INT64*,INT64*,INT64*);
         BOOL       (WINE_GLAPI *p_wglMakeContextCurrentARB)(HDC,HDC,struct wgl_context *);
         BOOL       (WINE_GLAPI *p_wglQueryPbufferARB)(struct wgl_pbuffer *,int,int*);
         int        (WINE_GLAPI *p_wglReleasePbufferDCARB)(struct wgl_pbuffer *,HDC);
@@ -2903,6 +2905,7 @@ struct opengl_funcs
         BOOL       (WINE_GLAPI *p_wglSetPbufferAttribARB)(struct wgl_pbuffer *,const int*);
         BOOL       (WINE_GLAPI *p_wglSetPixelFormatWINE)(HDC,int);
         BOOL       (WINE_GLAPI *p_wglSwapIntervalEXT)(int);
+        BOOL       (WINE_GLAPI *p_wglWaitForMscOML)(HDC,INT64,INT64,INT64,INT64*,INT64*,INT64*);
     } ext;
 };
 

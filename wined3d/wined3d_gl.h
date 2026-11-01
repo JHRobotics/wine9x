@@ -159,6 +159,7 @@ enum wined3d_gl_extension
     /* WGL extensions */
     WGL_ARB_PIXEL_FORMAT,
     WGL_EXT_SWAP_CONTROL,
+    WGL_OML_SYNC_CONTROL,
     WGL_WINE_PIXEL_FORMAT_PASSTHROUGH,
     /* Internally used */
     WINED3D_GL_BLEND_EQUATION,

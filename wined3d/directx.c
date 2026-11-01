@@ -263,6 +263,7 @@ static const struct wined3d_extension_map wgl_extension_map[] =
 {
     {"WGL_ARB_pixel_format",                WGL_ARB_PIXEL_FORMAT             },
     {"WGL_EXT_swap_control",                WGL_EXT_SWAP_CONTROL             },
+    {"WGL_OML_sync_control",                WGL_OML_SYNC_CONTROL             },
     {"WGL_WINE_pixel_format_passthrough",   WGL_WINE_PIXEL_FORMAT_PASSTHROUGH},
 };
 
@@ -3063,6 +3064,9 @@ static void load_gl_funcs(struct wined3d_gl_info *gl_info)
     USE_GL_FUNC(wglGetPixelFormatAttribivARB)
     USE_GL_FUNC(wglSetPixelFormatWINE)
     USE_GL_FUNC(wglSwapIntervalEXT)
+    USE_GL_FUNC(wglGetMscRateOML)
+    USE_GL_FUNC(wglGetSyncValuesOML)
+    USE_GL_FUNC(wglWaitForMscOML)
 
     /* Newer core functions */
     USE_GL_FUNC(glActiveTexture)            /* OpenGL 1.3 */

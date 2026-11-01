@@ -255,6 +255,7 @@ EXPORTS
   wined3d_swapchain_get_parent
   wined3d_swapchain_get_desc
   wined3d_swapchain_get_raster_status
+  wined3d_swapchain_wait_for_vblank
   wined3d_swapchain_incref
   wined3d_swapchain_present
 ;  wined3d_swapchain_resize_buffers
