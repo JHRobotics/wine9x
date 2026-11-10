@@ -208,10 +208,107 @@ struct wined3d_texture * CDECL wined3d_swapchain_get_back_buffer(const struct wi
     return swapchain->back_buffers[back_buffer_idx];
 }
 
+/* The context of the swapchain's front buffer if the driver counts its blanks (WGL_OML_sync_control), else NULL. */
+static struct wined3d_context *swapchain_vblank_context(const struct wined3d_swapchain *swapchain)
+{
+    struct wined3d_surface *front;
+    struct wined3d_context *context;
+
+    if (!swapchain->device->d3d_initialized || !swapchain->front_buffer)
+        return NULL;
+
+    front = surface_from_resource(wined3d_texture_get_sub_resource(swapchain->front_buffer, 0));
+    context = context_acquire(swapchain->device, front);
+    if (!context->valid || !context->gl_info->supported[WGL_OML_SYNC_CONTROL])
+    {
+        context_release(context);
+        return NULL;
+    }
+    return context;
+}
+
+/* Waits interval blanks after the last one waited for, or for the next one when that has passed or interval is 0. */
+HRESULT CDECL wined3d_swapchain_wait_for_vblank(struct wined3d_swapchain *swapchain, unsigned int interval)
+{
+    static const INT64 next_blank_divisor = 1, next_blank_remainder = 0;
+    const struct wined3d_gl_info *gl_info;
+    struct wined3d_context *context;
+    INT64 target_msc = 0, ust, msc, sbc;
+    BOOL waited;
+
+    TRACE("swapchain %p, interval %u.\n", swapchain, interval);
+
+    if (!(context = swapchain_vblank_context(swapchain)))
+        return WINED3DERR_NOTAVAILABLE;
+
+    gl_info = context->gl_info;
+    if (interval && swapchain->vblank_msc)
+        target_msc = swapchain->vblank_msc + interval;
+    /* A target already passed waits for the next blank. */
+    waited = GL_EXTCALL(wglWaitForMscOML(context->hdc, target_msc, next_blank_divisor, next_blank_remainder, &ust, &msc, &sbc));
+    if (waited)
+        swapchain->vblank_msc = msc;
+    context_release(context);
+
+    return waited ? WINED3D_OK : WINED3DERR_NOTAVAILABLE;
+}
+
+/* The raster position from the driver's last blank, its UST counted in microseconds of QueryPerformanceCounter. */
+static HRESULT swapchain_get_vblank_raster_status(const struct wined3d_swapchain *swapchain,
+        struct wined3d_raster_status *raster_status)
+{
+    static const LONGLONG microseconds_per_second = 1000000, longest_frame = 1000000;
+    static const UINT vblank_lines = 20; /* as wined3d_get_adapter_raster_status assumes */
+    const struct wined3d_gl_info *gl_info;
+    struct wined3d_context *context;
+    struct wined3d_display_mode mode;
+    LARGE_INTEGER counter, frequency;
+    INT64 ust, msc, sbc;
+    INT32 numerator, denominator;
+    LONGLONG now, since_blank, period;
+    UINT lines, line;
+    BOOL known;
+
+    if (!(context = swapchain_vblank_context(swapchain)))
+        return WINED3DERR_NOTAVAILABLE;
+
+    gl_info = context->gl_info;
+    known = GL_EXTCALL(wglGetSyncValuesOML(context->hdc, &ust, &msc, &sbc))
+            && GL_EXTCALL(wglGetMscRateOML(context->hdc, &numerator, &denominator));
+    context_release(context);
+    if (!known || numerator <= 0 || denominator <= 0)
+        return WINED3DERR_NOTAVAILABLE;
+
+    if (!QueryPerformanceCounter(&counter) || !QueryPerformanceFrequency(&frequency))
+        return WINED3DERR_NOTAVAILABLE;
+    if (FAILED(wined3d_get_adapter_display_mode(swapchain->device->wined3d,
+            swapchain->device->adapter->ordinal, &mode, NULL)))
+        return WINED3DERR_NOTAVAILABLE;
+
+    /* Seconds and the rest apart: the counter times a million overflows within hours on a GHz counter. */
+    now = counter.QuadPart / frequency.QuadPart * microseconds_per_second
+            + counter.QuadPart % frequency.QuadPart * microseconds_per_second / frequency.QuadPart;
+    since_blank = now - ust;
+    period = microseconds_per_second * denominator / numerator;
+    /* A UST from another clock than QueryPerformanceCounter. */
+    if (since_blank < 0 || since_blank > longest_frame || period <= 0)
+        return WINED3DERR_NOTAVAILABLE;
+
+    lines = mode.height + vblank_lines;
+    line = (UINT)((since_blank % period) * lines / period);
+    raster_status->in_vblank = line >= mode.height;
+    raster_status->scan_line = raster_status->in_vblank ? 0 : line;
+
+    return WINED3D_OK;
+}
+
 HRESULT CDECL wined3d_swapchain_get_raster_status(const struct wined3d_swapchain *swapchain,
         struct wined3d_raster_status *raster_status)
 {
     TRACE("swapchain %p, raster_status %p.\n", swapchain, raster_status);
+
+    if (SUCCEEDED(swapchain_get_vblank_raster_status(swapchain, raster_status)))
+        return WINED3D_OK;
 
     return wined3d_get_adapter_raster_status(swapchain->device->wined3d,
             swapchain->device->adapter->ordinal, raster_status);

@@ -1235,6 +1235,21 @@ static HRESULT WINAPI DECLSPEC_HOTPATCH ddraw_surface1_Unlock(IDirectDrawSurface
     return ddraw_surface7_Unlock(&surface->IDirectDrawSurface7_iface, NULL);
 }
 
+#define DDRAW_FLIP_INTERVAL_MASK  0x07000000
+#define DDRAW_FLIP_INTERVAL_SHIFT 24
+
+/* A flip of the primary waits for the vertical blank unless DDFLIP_NOVSYNC; DDFLIP_INTERVALn waits n blanks. */
+static void ddraw_surface_flip_wait_for_vblank(struct ddraw_surface *surface, DWORD flags)
+{
+    unsigned int interval = (flags & DDRAW_FLIP_INTERVAL_MASK) >> DDRAW_FLIP_INTERVAL_SHIFT;
+
+    if ((flags & DDFLIP_NOVSYNC) || !surface->ddraw->wined3d_swapchain)
+        return;
+    if (!interval)
+        interval = 1;
+    wined3d_swapchain_wait_for_vblank(surface->ddraw->wined3d_swapchain, interval);
+}
+
 static HRESULT WINAPI DECLSPEC_HOTPATCH ddraw_surface7_Flip(IDirectDrawSurface7 *iface,
         IDirectDrawSurface7 *src, DWORD flags)
 {
@@ -1339,7 +1354,7 @@ static HRESULT WINAPI DECLSPEC_HOTPATCH ddraw_surface7_Flip(IDirectDrawSurface7 
     wined3d_resource_set_parent(wined3d_texture_get_resource(texture), ddraw_texture);
     src_impl->wined3d_texture = texture;
 
-    if (flags)
+    if (flags & ~(DDFLIP_WAIT | DDFLIP_NOVSYNC | DDRAW_FLIP_INTERVAL_MASK))
     {
         static UINT once;
         if (!once++)
@@ -1349,7 +1364,10 @@ static HRESULT WINAPI DECLSPEC_HOTPATCH ddraw_surface7_Flip(IDirectDrawSurface7 
     }
 
     if (dst_impl->surface_desc.ddsCaps.dwCaps & DDSCAPS_PRIMARYSURFACE)
+    {
+        ddraw_surface_flip_wait_for_vblank(dst_impl, flags);
         hr = ddraw_surface_update_frontbuffer(dst_impl, NULL, FALSE);
+    }
     else
         hr = DD_OK;
 
