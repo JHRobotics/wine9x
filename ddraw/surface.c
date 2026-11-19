@@ -1235,6 +1235,8 @@ static HRESULT WINAPI DECLSPEC_HOTPATCH ddraw_surface1_Unlock(IDirectDrawSurface
     return ddraw_surface7_Unlock(&surface->IDirectDrawSurface7_iface, NULL);
 }
 
+static HRESULT ddraw_surface_draw_overlay(struct ddraw_surface *overlay);
+
 static HRESULT WINAPI DECLSPEC_HOTPATCH ddraw_surface7_Flip(IDirectDrawSurface7 *iface,
         IDirectDrawSurface7 *src, DWORD flags)
 {
@@ -1350,6 +1352,17 @@ static HRESULT WINAPI DECLSPEC_HOTPATCH ddraw_surface7_Flip(IDirectDrawSurface7 
 
     if (dst_impl->surface_desc.ddsCaps.dwCaps & DDSCAPS_PRIMARYSURFACE)
         hr = ddraw_surface_update_frontbuffer(dst_impl, NULL, FALSE);
+    else if (dst_impl->surface_desc.ddsCaps.dwCaps & DDSCAPS_OVERLAY)
+    {
+        /* The front of the chain holds the new picture now; a failed drawing does not fail the Flip. */
+        HRESULT draw_hr = ddraw_surface_draw_overlay(dst_impl);
+
+        if (FAILED(draw_hr))
+        {
+            WARN("Failed to draw overlay %p, hr %#x.\n", dst_impl, draw_hr);
+        }
+        hr = DD_OK;
+    }
     else
         hr = DD_OK;
 
@@ -1525,6 +1538,57 @@ static HRESULT ddraw_surface_blt_clipped(struct ddraw_surface *dst_surface, cons
 
     free(clip_list);
     return hr;
+}
+
+/* WineD3D shows no overlay by itself: a visible overlay is blitted onto its destination -- converted from YUV and stretched by WineD3D's
+ * blitter, cut by the destination's clipper -- after UpdateOverlay, SetOverlayPosition and each Flip. The destination colour key is
+ * not checked: WineD3D's accelerated blits have none, and the Video Mixing Renderer 7 fills the whole destination with it.
+ * Under the wined3d mutex. */
+static HRESULT ddraw_surface_draw_overlay(struct ddraw_surface *overlay)
+{
+    BOOL source_empty = IsRectEmpty(&overlay->overlay_source_rect);
+    BOOL destination_empty = IsRectEmpty(&overlay->overlay_destination_rect);
+
+    if (!overlay->overlay_shown || !overlay->overlay_destination || source_empty || destination_empty)
+    {
+        return DD_OK;
+    }
+    TRACE("Drawing overlay %p onto %p, %s -> %s.\n", overlay, overlay->overlay_destination,
+            wine_dbgstr_rect(&overlay->overlay_source_rect), wine_dbgstr_rect(&overlay->overlay_destination_rect));
+    return ddraw_surface_blt_clipped(overlay->overlay_destination, &overlay->overlay_destination_rect,
+            overlay, &overlay->overlay_source_rect, 0, NULL, WINED3D_TEXF_LINEAR);
+}
+
+/* Keeps what UpdateOverlay set: without a rectangle the whole surface counts; HIDE hides, SHOW shows, neither keeps the visibility. */
+static void ddraw_surface_record_overlay(struct ddraw_surface *overlay, const RECT *source_rect,
+        struct ddraw_surface *destination, const RECT *destination_rect, DWORD flags)
+{
+    if (flags & DDOVER_HIDE)
+    {
+        overlay->overlay_shown = FALSE;
+        return;
+    }
+    overlay->overlay_destination = destination;
+    if (source_rect)
+    {
+        overlay->overlay_source_rect = *source_rect;
+    }
+    else
+    {
+        SetRect(&overlay->overlay_source_rect, 0, 0, overlay->surface_desc.dwWidth, overlay->surface_desc.dwHeight);
+    }
+    if (destination_rect)
+    {
+        overlay->overlay_destination_rect = *destination_rect;
+    }
+    else
+    {
+        SetRect(&overlay->overlay_destination_rect, 0, 0, destination->surface_desc.dwWidth, destination->surface_desc.dwHeight);
+    }
+    if (flags & DDOVER_SHOW)
+    {
+        overlay->overlay_shown = TRUE;
+    }
 }
 
 /*****************************************************************************
@@ -3658,6 +3722,17 @@ static HRESULT WINAPI ddraw_surface7_SetOverlayPosition(IDirectDrawSurface7 *ifa
 
     wined3d_mutex_lock();
     hr = wined3d_surface_set_overlay_position(surface->wined3d_surface, X, Y);
+    if (SUCCEEDED(hr))
+    {
+        HRESULT draw_hr;
+
+        OffsetRect(&surface->overlay_destination_rect, X - surface->overlay_destination_rect.left, Y - surface->overlay_destination_rect.top);
+        draw_hr = ddraw_surface_draw_overlay(surface);
+        if (FAILED(draw_hr))
+        {
+            WARN("Failed to draw overlay %p, hr %#x.\n", surface, draw_hr);
+        }
+    }
     wined3d_mutex_unlock();
 
     return hr;
@@ -3727,6 +3802,17 @@ static HRESULT WINAPI ddraw_surface7_UpdateOverlay(IDirectDrawSurface7 *iface, R
     wined3d_mutex_lock();
     hr = wined3d_surface_update_overlay(src_impl->wined3d_surface, SrcRect,
             dst_impl ? dst_impl->wined3d_surface : NULL, DstRect, Flags, (WINEDDOVERLAYFX *)FX);
+    if (SUCCEEDED(hr) && dst_impl)
+    {
+        HRESULT draw_hr;
+
+        ddraw_surface_record_overlay(src_impl, SrcRect, dst_impl, DstRect, Flags);
+        draw_hr = ddraw_surface_draw_overlay(src_impl);
+        if (FAILED(draw_hr))
+        {
+            WARN("Failed to draw overlay %p, hr %#x.\n", src_impl, draw_hr);
+        }
+    }
     wined3d_mutex_unlock();
 
     switch(hr) {
@@ -5620,6 +5706,7 @@ struct ddraw_surface *unsafe_impl_from_IDirect3DTexture(IDirect3DTexture *iface)
 static void STDMETHODCALLTYPE ddraw_surface_wined3d_object_destroyed(void *parent)
 {
     struct ddraw_surface *surface = parent;
+    struct ddraw_surface *overlay;
 
     TRACE("surface %p.\n", surface);
 
@@ -5646,6 +5733,16 @@ static void STDMETHODCALLTYPE ddraw_surface_wined3d_object_destroyed(void *paren
     /* Having a texture handle set implies that the device still exists. */
     if (surface->Handle)
         ddraw_free_handle(&surface->ddraw->d3ddevice->handle_table, surface->Handle - 1, DDRAW_HANDLE_SURFACE);
+
+    /* Overlays shown on this surface lose their destination. */
+    LIST_FOR_EACH_ENTRY(overlay, &surface->ddraw->surface_list, struct ddraw_surface, surface_list_entry)
+    {
+        if (overlay->overlay_destination == surface)
+        {
+            overlay->overlay_destination = NULL;
+            overlay->overlay_shown = FALSE;
+        }
+    }
 
     /* Reduce the ddraw surface count. */
     list_remove(&surface->surface_list_entry);
