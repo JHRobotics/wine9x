@@ -1030,6 +1030,8 @@ static void context_restore_gl_context(const struct wined3d_gl_info *gl_info, HD
 
 static void context_update_window(struct wined3d_context *context)
 {
+    swapchain_update_child_window(context->swapchain);
+
     if (context->win_handle == context->swapchain->win_handle)
         return;
 
