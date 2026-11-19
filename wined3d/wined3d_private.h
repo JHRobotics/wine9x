@@ -2960,8 +2960,6 @@ struct wined3d_swapchain
     /* With WINED3D_CHILD_WINDOW, win_handle is a child window over the client area of child_parent. */
     HWND child_window;
     HWND child_parent;
-    /* WineD3D took WS_CLIPCHILDREN from child_parent and gives it back with the child. */
-    BOOL child_parent_unclipped;
 };
 
 void x11_copy_to_screen(const struct wined3d_swapchain *swapchain, const RECT *rect) DECLSPEC_HIDDEN;

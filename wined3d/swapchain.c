@@ -27,19 +27,75 @@
 WINE_DEFAULT_DEBUG_CHANNEL(d3d);
 WINE_DECLARE_DEBUG_CHANNEL(fps);
 
+/* Posted to the child window by a thread that does not own it: the child takes WS_CLIPCHILDREN from its parent, in their thread. */
+#define WINED3D_CHILD_UNCLIP_PARENT (WM_APP + 0x3d3)
+/* Set on the child window while its parent is without WS_CLIPCHILDREN because of it; the parent gets the style back when the child goes. */
+#define WINED3D_CHILD_UNCLIPPED_PROPERTY "WineD3D child unclipped"
+
 /* The parent keeps the child's area in its own clip region. DirectShow's old Video Renderer stops using DirectDraw once the clip box of
- * its window is no simple rectangle; what the parent draws under the child is covered by the child's picture anyway. */
+ * its window is no simple rectangle; what the parent draws under the child is covered by the child's picture anyway. In the thread of
+ * child and parent. */
+static void child_window_unclip_parent(HWND child)
+{
+    HWND parent = GetParent(child);
+    LONG parent_style;
+
+    if (!parent)
+    {
+        return;
+    }
+    parent_style = GetWindowLongA(parent, GWL_STYLE);
+    if (!(parent_style & WS_CLIPCHILDREN))
+    {
+        return;
+    }
+    TRACE("Taking WS_CLIPCHILDREN from window %p.\n", parent);
+    SetPropA(child, WINED3D_CHILD_UNCLIPPED_PROPERTY, (HANDLE)TRUE);
+    SetWindowLongA(parent, GWL_STYLE, parent_style & ~WS_CLIPCHILDREN);
+}
+
+/* The child window's procedure: it unclips its parent when asked, and gives the parent WS_CLIPCHILDREN back when it is destroyed. */
+static LRESULT CALLBACK child_window_procedure(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
+{
+    if (message == WINED3D_CHILD_UNCLIP_PARENT)
+    {
+        child_window_unclip_parent(window);
+        return 0;
+    }
+    if (message == WM_DESTROY && RemovePropA(window, WINED3D_CHILD_UNCLIPPED_PROPERTY))
+    {
+        HWND parent = GetParent(window);
+
+        if (parent && IsWindow(parent))
+        {
+            LONG parent_style = GetWindowLongA(parent, GWL_STYLE);
+
+            SetWindowLongA(parent, GWL_STYLE, parent_style | WS_CLIPCHILDREN);
+        }
+    }
+    return DefWindowProcA(window, message, wparam, lparam);
+}
+
+/* Players set their renderer window's style after connecting, WS_CLIPCHILDREN with it. Another thread only posts the change: SetWindowLong
+ * would send to the parent's thread while this one may hold the wined3d mutex that thread waits for. */
 static void swapchain_unclip_child_parent(struct wined3d_swapchain *swapchain)
 {
     LONG parent_style = GetWindowLongA(swapchain->child_parent, GWL_STYLE);
+    DWORD child_thread;
+    DWORD current_thread;
 
     if (!(parent_style & WS_CLIPCHILDREN))
     {
         return;
     }
-    TRACE("Taking WS_CLIPCHILDREN from window %p.\n", swapchain->child_parent);
-    SetWindowLongA(swapchain->child_parent, GWL_STYLE, parent_style & ~WS_CLIPCHILDREN);
-    swapchain->child_parent_unclipped = TRUE;
+    child_thread = GetWindowThreadProcessId(swapchain->child_window, NULL);
+    current_thread = GetCurrentThreadId();
+    if (child_thread == current_thread)
+    {
+        child_window_unclip_parent(swapchain->child_window);
+        return;
+    }
+    PostMessageA(swapchain->child_window, WINED3D_CHILD_UNCLIP_PARENT, 0, 0);
 }
 
 /* Windows sets a window's pixel format only once; drawing into a child keeps the application's window free for its own OpenGL. */
@@ -84,6 +140,7 @@ static HWND swapchain_create_child_window(struct wined3d_swapchain *swapchain, H
     }
     /* A disabled child passes the mouse on to its parent. It stays hidden until WineD3D draws into it (swapchain_show_child_window). */
     SetWindowPos(child, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    SetWindowLongPtrA(child, GWLP_WNDPROC, (LONG_PTR)child_window_procedure);
 
     TRACE("Created child window %p for window %p.\n", child, window);
     swapchain->child_window = child;
@@ -99,20 +156,14 @@ static void swapchain_destroy_child_window(struct wined3d_swapchain *swapchain)
         return;
     }
 
+    /* The child gives its parent WS_CLIPCHILDREN back as it is destroyed (child_window_procedure), in their thread. */
     TRACE("Destroying child window %p.\n", swapchain->child_window);
     if (!DestroyWindow(swapchain->child_window))
     {
         PostMessageA(swapchain->child_window, WM_CLOSE, 0, 0);
     }
-    if (swapchain->child_parent_unclipped && IsWindow(swapchain->child_parent))
-    {
-        LONG parent_style = GetWindowLongA(swapchain->child_parent, GWL_STYLE);
-
-        SetWindowLongA(swapchain->child_parent, GWL_STYLE, parent_style | WS_CLIPCHILDREN);
-    }
     swapchain->child_window = NULL;
     swapchain->child_parent = NULL;
-    swapchain->child_parent_unclipped = FALSE;
 }
 
 void swapchain_update_child_window(struct wined3d_swapchain *swapchain)
@@ -126,7 +177,6 @@ void swapchain_update_child_window(struct wined3d_swapchain *swapchain)
     {
         return;
     }
-    /* Players set their renderer window's style after connecting, WS_CLIPCHILDREN with it. */
     swapchain_unclip_child_parent(swapchain);
 
     GetClientRect(swapchain->child_parent, &parent_rect);
