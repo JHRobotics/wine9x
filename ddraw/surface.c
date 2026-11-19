@@ -46,6 +46,98 @@ static BOOL ddraw_surface_is_screen(const struct ddraw_surface *surface)
     return surface->clipper == NULL;
 }
 
+/* An overlay on a window's primary surface is laid over the window's front buffer; on any other destination it is drawn into it. */
+static BOOL ddraw_surface_composes_overlays(const struct ddraw_surface *destination)
+{
+    BOOL primary = (destination->surface_desc.ddsCaps.dwCaps & DDSCAPS_PRIMARYSURFACE) != 0;
+
+    return primary && destination->ddraw->swapchain_window && !ddraw_surface_is_screen(destination);
+}
+
+/* The part of the overlay's source that lands on part, a piece of its destination rectangle. */
+static void ddraw_surface_overlay_source_part(const struct ddraw_surface *overlay, const RECT *part, RECT *source_part)
+{
+    const RECT *source = &overlay->overlay_source_rect;
+    const RECT *destination = &overlay->overlay_destination_rect;
+    float scale_x = (float)(source->right - source->left) / (float)(destination->right - destination->left);
+    float scale_y = (float)(source->bottom - source->top) / (float)(destination->bottom - destination->top);
+
+    source_part->left = source->left + (LONG)((part->left - destination->left) * scale_x);
+    source_part->top = source->top + (LONG)((part->top - destination->top) * scale_y);
+    source_part->right = source->right - (LONG)((destination->right - part->right) * scale_x);
+    source_part->bottom = source->bottom - (LONG)((destination->bottom - part->bottom) * scale_y);
+}
+
+/* Updates area of the window's front buffer from a primary that shows overlays: each overlay covers its rectangle and the primary shows
+ * around them, every pixel written once -- each blit onto the front buffer is presented at once, so drawing the primary first would show
+ * the destination colour key for a moment. The colour key is not checked: the Video Mixing Renderer 7 fills the overlay's whole place
+ * with it, also when it repaints a paused video. Under the wined3d mutex. */
+static HRESULT ddraw_surface_update_frontbuffer_with_overlays(struct ddraw_surface *primary, const RECT *area)
+{
+    struct wined3d_surface *frontbuffer = primary->ddraw->wined3d_frontbuffer;
+    HRGN uncovered = CreateRectRgnIndirect(area);
+    struct ddraw_surface *overlay;
+    const RECT *uncovered_rects;
+    RGNDATA *uncovered_data;
+    HRESULT hr = DD_OK;
+    DWORD data_size;
+    DWORD i;
+
+    if (!uncovered)
+    {
+        return wined3d_surface_blt(frontbuffer, area, primary->wined3d_surface, area, 0, NULL, WINED3D_TEXF_POINT);
+    }
+    LIST_FOR_EACH_ENTRY(overlay, &primary->ddraw->surface_list, struct ddraw_surface, surface_list_entry)
+    {
+        BOOL source_empty = IsRectEmpty(&overlay->overlay_source_rect);
+        RECT source_part;
+        HRGN covered;
+        RECT part;
+
+        if (!overlay->overlay_shown || overlay->overlay_destination != primary || source_empty)
+        {
+            continue;
+        }
+        if (!IntersectRect(&part, area, &overlay->overlay_destination_rect))
+        {
+            continue;
+        }
+        ddraw_surface_overlay_source_part(overlay, &part, &source_part);
+        if (IsRectEmpty(&source_part))
+        {
+            continue;
+        }
+        hr = wined3d_surface_blt(frontbuffer, &part, overlay->wined3d_surface, &source_part, 0, NULL, WINED3D_TEXF_LINEAR);
+        if (FAILED(hr))
+        {
+            WARN("Failed to draw overlay %p, hr %#x.\n", overlay, hr);
+            continue;
+        }
+        if ((covered = CreateRectRgnIndirect(&part)))
+        {
+            CombineRgn(uncovered, uncovered, covered, RGN_DIFF);
+            DeleteObject(covered);
+        }
+    }
+
+    hr = DD_OK;
+    data_size = GetRegionData(uncovered, 0, NULL);
+    if (data_size && (uncovered_data = malloc(data_size)))
+    {
+        if (GetRegionData(uncovered, data_size, uncovered_data))
+        {
+            uncovered_rects = (const RECT *)uncovered_data->Buffer;
+            for (i = 0; i < uncovered_data->rdh.nCount && SUCCEEDED(hr); ++i)
+            {
+                hr = wined3d_surface_blt(frontbuffer, &uncovered_rects[i], primary->wined3d_surface, &uncovered_rects[i], 0, NULL, WINED3D_TEXF_POINT);
+            }
+        }
+        free(uncovered_data);
+    }
+    DeleteObject(uncovered);
+    return hr;
+}
+
 /* This is slow, of course. Also, in case of locks, we can't prevent other
  * applications from drawing to the screen while we've locked the frontbuffer.
  * We'd like to do this in wined3d instead, but for that to work wined3d needs
@@ -87,6 +179,12 @@ HRESULT ddraw_surface_update_frontbuffer(struct ddraw_surface *surface, const RE
         if (read)
             return DD_OK;
 
+        if (surface->shown_overlay_count)
+        {
+            RECT area = {x, y, x + w, y + h};
+
+            return ddraw_surface_update_frontbuffer_with_overlays(surface, &area);
+        }
         return wined3d_surface_blt(surface->ddraw->wined3d_frontbuffer, rect,
                 surface->wined3d_surface, rect, 0, NULL, WINED3D_TEXF_POINT);
     }
@@ -1235,7 +1333,7 @@ static HRESULT WINAPI DECLSPEC_HOTPATCH ddraw_surface1_Unlock(IDirectDrawSurface
     return ddraw_surface7_Unlock(&surface->IDirectDrawSurface7_iface, NULL);
 }
 
-static HRESULT ddraw_surface_draw_overlay(struct ddraw_surface *overlay);
+static void ddraw_surface_show_overlay(struct ddraw_surface *overlay);
 
 static HRESULT WINAPI DECLSPEC_HOTPATCH ddraw_surface7_Flip(IDirectDrawSurface7 *iface,
         IDirectDrawSurface7 *src, DWORD flags)
@@ -1355,12 +1453,7 @@ static HRESULT WINAPI DECLSPEC_HOTPATCH ddraw_surface7_Flip(IDirectDrawSurface7 
     else if (dst_impl->surface_desc.ddsCaps.dwCaps & DDSCAPS_OVERLAY)
     {
         /* The front of the chain holds the new picture now; a failed drawing does not fail the Flip. */
-        HRESULT draw_hr = ddraw_surface_draw_overlay(dst_impl);
-
-        if (FAILED(draw_hr))
-        {
-            WARN("Failed to draw overlay %p, hr %#x.\n", dst_impl, draw_hr);
-        }
+        ddraw_surface_show_overlay(dst_impl);
         hr = DD_OK;
     }
     else
@@ -1540,10 +1633,24 @@ static HRESULT ddraw_surface_blt_clipped(struct ddraw_surface *dst_surface, cons
     return hr;
 }
 
-/* WineD3D shows no overlay by itself: a visible overlay is blitted onto its destination -- converted from YUV and stretched by WineD3D's
- * blitter, cut by the destination's clipper -- after UpdateOverlay, SetOverlayPosition and each Flip. The destination colour key is
- * not checked: WineD3D's accelerated blits have none, and the Video Mixing Renderer 7 fills the whole destination with it.
- * Under the wined3d mutex. */
+/* Keeps every destination's count of the overlays it shows. */
+static void ddraw_surface_set_overlay_state(struct ddraw_surface *overlay, struct ddraw_surface *destination, BOOL shown)
+{
+    if (overlay->overlay_shown && overlay->overlay_destination)
+    {
+        overlay->overlay_destination->shown_overlay_count--;
+    }
+    overlay->overlay_destination = destination;
+    overlay->overlay_shown = shown && destination != NULL;
+    if (overlay->overlay_shown)
+    {
+        destination->shown_overlay_count++;
+    }
+}
+
+/* WineD3D shows no overlay by itself. On a destination that is no window's primary a visible overlay is blitted into it -- converted
+ * from YUV and stretched by WineD3D's blitter, cut by the destination's clipper. The destination colour key is not checked: WineD3D's
+ * accelerated blits have none. Under the wined3d mutex. */
 static HRESULT ddraw_surface_draw_overlay(struct ddraw_surface *overlay)
 {
     BOOL source_empty = IsRectEmpty(&overlay->overlay_source_rect);
@@ -1559,16 +1666,77 @@ static HRESULT ddraw_surface_draw_overlay(struct ddraw_surface *overlay)
             overlay, &overlay->overlay_source_rect, 0, NULL, WINED3D_TEXF_LINEAR);
 }
 
+/* The front buffer shows area of a window's primary anew, with the overlays over it. Under the wined3d mutex. */
+static void ddraw_surface_redraw_area(struct ddraw_surface *primary, const RECT *area)
+{
+    RECT bounds;
+    RECT part;
+    HRESULT hr;
+
+    SetRect(&bounds, 0, 0, primary->surface_desc.dwWidth, primary->surface_desc.dwHeight);
+    if (!IntersectRect(&part, &bounds, area))
+    {
+        return;
+    }
+    if (FAILED(hr = ddraw_surface_update_frontbuffer(primary, &part, FALSE)))
+    {
+        WARN("Failed to update the front buffer of %p, hr %#x.\n", primary, hr);
+    }
+}
+
+/* Shows the overlay's current picture after UpdateOverlay, SetOverlayPosition and each Flip: on a window's primary the front buffer is
+ * redrawn where the overlay lies, any other destination gets the overlay drawn into it. Under the wined3d mutex. */
+static void ddraw_surface_show_overlay(struct ddraw_surface *overlay)
+{
+    struct ddraw_surface *destination = overlay->overlay_destination;
+    HRESULT hr;
+
+    if (!overlay->overlay_shown || !destination)
+    {
+        return;
+    }
+    if (ddraw_surface_composes_overlays(destination))
+    {
+        ddraw_surface_redraw_area(destination, &overlay->overlay_destination_rect);
+        return;
+    }
+    if (FAILED(hr = ddraw_surface_draw_overlay(overlay)))
+    {
+        WARN("Failed to draw overlay %p, hr %#x.\n", overlay, hr);
+    }
+}
+
+/* After UpdateOverlay or SetOverlayPosition: the place a composed overlay left shows its destination again, its new place the overlay. */
+static void ddraw_surface_move_overlay(struct ddraw_surface *overlay, struct ddraw_surface *previous_destination, const RECT *previous_rect)
+{
+    if (previous_destination && ddraw_surface_composes_overlays(previous_destination))
+    {
+        BOOL same_destination = overlay->overlay_shown && overlay->overlay_destination == previous_destination;
+        BOOL same_place = same_destination && EqualRect(previous_rect, &overlay->overlay_destination_rect);
+
+        if (!same_place)
+        {
+            ddraw_surface_redraw_area(previous_destination, previous_rect);
+        }
+    }
+    ddraw_surface_show_overlay(overlay);
+}
+
 /* Keeps what UpdateOverlay set: without a rectangle the whole surface counts; HIDE hides, SHOW shows, neither keeps the visibility. */
 static void ddraw_surface_record_overlay(struct ddraw_surface *overlay, const RECT *source_rect,
         struct ddraw_surface *destination, const RECT *destination_rect, DWORD flags)
 {
+    BOOL shown;
+
     if (flags & DDOVER_HIDE)
     {
-        overlay->overlay_shown = FALSE;
+        ddraw_surface_set_overlay_state(overlay, overlay->overlay_destination, FALSE);
         return;
     }
-    overlay->overlay_destination = destination;
+    if (!destination)
+    {
+        return;
+    }
     if (source_rect)
     {
         overlay->overlay_source_rect = *source_rect;
@@ -1585,10 +1753,8 @@ static void ddraw_surface_record_overlay(struct ddraw_surface *overlay, const RE
     {
         SetRect(&overlay->overlay_destination_rect, 0, 0, destination->surface_desc.dwWidth, destination->surface_desc.dwHeight);
     }
-    if (flags & DDOVER_SHOW)
-    {
-        overlay->overlay_shown = TRUE;
-    }
+    shown = (flags & DDOVER_SHOW) ? TRUE : overlay->overlay_shown;
+    ddraw_surface_set_overlay_state(overlay, destination, shown);
 }
 
 /*****************************************************************************
@@ -3724,14 +3890,11 @@ static HRESULT WINAPI ddraw_surface7_SetOverlayPosition(IDirectDrawSurface7 *ifa
     hr = wined3d_surface_set_overlay_position(surface->wined3d_surface, X, Y);
     if (SUCCEEDED(hr))
     {
-        HRESULT draw_hr;
+        struct ddraw_surface *previous_destination = surface->overlay_shown ? surface->overlay_destination : NULL;
+        RECT previous_rect = surface->overlay_destination_rect;
 
         OffsetRect(&surface->overlay_destination_rect, X - surface->overlay_destination_rect.left, Y - surface->overlay_destination_rect.top);
-        draw_hr = ddraw_surface_draw_overlay(surface);
-        if (FAILED(draw_hr))
-        {
-            WARN("Failed to draw overlay %p, hr %#x.\n", surface, draw_hr);
-        }
+        ddraw_surface_move_overlay(surface, previous_destination, &previous_rect);
     }
     wined3d_mutex_unlock();
 
@@ -3802,16 +3965,13 @@ static HRESULT WINAPI ddraw_surface7_UpdateOverlay(IDirectDrawSurface7 *iface, R
     wined3d_mutex_lock();
     hr = wined3d_surface_update_overlay(src_impl->wined3d_surface, SrcRect,
             dst_impl ? dst_impl->wined3d_surface : NULL, DstRect, Flags, (WINEDDOVERLAYFX *)FX);
-    if (SUCCEEDED(hr) && dst_impl)
+    if (SUCCEEDED(hr) && (dst_impl || (Flags & DDOVER_HIDE)))
     {
-        HRESULT draw_hr;
+        struct ddraw_surface *previous_destination = src_impl->overlay_shown ? src_impl->overlay_destination : NULL;
+        RECT previous_rect = src_impl->overlay_destination_rect;
 
         ddraw_surface_record_overlay(src_impl, SrcRect, dst_impl, DstRect, Flags);
-        draw_hr = ddraw_surface_draw_overlay(src_impl);
-        if (FAILED(draw_hr))
-        {
-            WARN("Failed to draw overlay %p, hr %#x.\n", src_impl, draw_hr);
-        }
+        ddraw_surface_move_overlay(src_impl, previous_destination, &previous_rect);
     }
     wined3d_mutex_unlock();
 
@@ -5734,13 +5894,13 @@ static void STDMETHODCALLTYPE ddraw_surface_wined3d_object_destroyed(void *paren
     if (surface->Handle)
         ddraw_free_handle(&surface->ddraw->d3ddevice->handle_table, surface->Handle - 1, DDRAW_HANDLE_SURFACE);
 
-    /* Overlays shown on this surface lose their destination. */
+    /* An overlay leaves its destination's count; overlays shown on this surface lose their destination. */
+    ddraw_surface_set_overlay_state(surface, NULL, FALSE);
     LIST_FOR_EACH_ENTRY(overlay, &surface->ddraw->surface_list, struct ddraw_surface, surface_list_entry)
     {
         if (overlay->overlay_destination == surface)
         {
-            overlay->overlay_destination = NULL;
-            overlay->overlay_shown = FALSE;
+            ddraw_surface_set_overlay_state(overlay, NULL, FALSE);
         }
     }
 
