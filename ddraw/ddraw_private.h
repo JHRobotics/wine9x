@@ -211,6 +211,7 @@ void ddraw_surface_init(struct ddraw_surface *surface, struct ddraw *ddraw, stru
 ULONG ddraw_surface_release_iface(struct ddraw_surface *This) DECLSPEC_HIDDEN;
 HRESULT ddraw_surface_update_frontbuffer(struct ddraw_surface *surface,
         const RECT *rect, BOOL read) DECLSPEC_HIDDEN;
+void ddraw_surface_follow_clipper_window(struct ddraw_surface *surface) DECLSPEC_HIDDEN;
 
 static inline struct ddraw_surface *impl_from_IDirect3DTexture(IDirect3DTexture *iface)
 {
@@ -376,6 +377,8 @@ struct ddraw_clipper
     HWND window;
     HRGN region;
     BOOL initialized;
+    /* The primary surface the clipper is set on, if any: its swapchain follows SetHWnd. */
+    struct ddraw_surface *primary;
 };
 
 HRESULT ddraw_clipper_init(struct ddraw_clipper *clipper) DECLSPEC_HIDDEN;

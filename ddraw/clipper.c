@@ -92,6 +92,10 @@ static HRESULT WINAPI ddraw_clipper_SetHWnd(IDirectDrawClipper *iface, DWORD fla
 
     wined3d_mutex_lock();
     clipper->window = window;
+    if (clipper->primary)
+    {
+        ddraw_surface_follow_clipper_window(clipper->primary);
+    }
     wined3d_mutex_unlock();
 
     return DD_OK;
