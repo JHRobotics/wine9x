@@ -277,6 +277,15 @@ static HRESULT WINAPI d3d9_device_QueryInterface(IDirect3DDevice9Ex *iface, REFI
         return S_OK;
     }
 
+    if (IsEqualGUID(riid, &IID_IDirect3DVideoDevice9))
+    {
+        struct d3d9_device *device = impl_from_IDirect3DDevice9Ex(iface);
+
+        IDirect3DDevice9Ex_AddRef(iface);
+        *out = &device->IDirect3DVideoDevice9_iface;
+        return S_OK;
+    }
+
     WARN("%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid(riid));
 
     *out = NULL;
@@ -3409,6 +3418,113 @@ static HRESULT WINAPI d3d9_device_GetDisplayModeEx(IDirect3DDevice9Ex *iface,
     return hr;
 }
 
+/* One object with the device: IUnknown and every other interface are the device's, and so is the reference count. */
+static HRESULT WINAPI d3d9_video_device_QueryInterface(IDirect3DVideoDevice9 *iface, REFIID riid, void **out)
+{
+    struct d3d9_device *device = impl_from_IDirect3DVideoDevice9(iface);
+
+    TRACE("iface %p, riid %s, out %p.\n", iface, debugstr_guid(riid), out);
+
+    return d3d9_device_QueryInterface(&device->IDirect3DDevice9Ex_iface, riid, out);
+}
+
+static ULONG WINAPI d3d9_video_device_AddRef(IDirect3DVideoDevice9 *iface)
+{
+    struct d3d9_device *device = impl_from_IDirect3DVideoDevice9(iface);
+
+    return d3d9_device_AddRef(&device->IDirect3DDevice9Ex_iface);
+}
+
+static ULONG WINAPI d3d9_video_device_Release(IDirect3DVideoDevice9 *iface)
+{
+    struct d3d9_device *device = impl_from_IDirect3DVideoDevice9(iface);
+
+    return d3d9_device_Release(&device->IDirect3DDevice9Ex_iface);
+}
+
+/* An offscreen plain surface. VMR-9 asks for pool 4, the local video memory of the driver interface, which is the default pool here. */
+static HRESULT WINAPI d3d9_video_device_CreateSurface(IDirect3DVideoDevice9 *iface, UINT width, UINT height, UINT back_buffer_count,
+        D3DFORMAT format, D3DPOOL pool, DWORD usage, IDirect3DSurface9 **surface, HANDLE *shared_handle)
+{
+    struct d3d9_device *device = impl_from_IDirect3DVideoDevice9(iface);
+    D3DPOOL surface_pool = pool;
+
+    TRACE("iface %p, width %u, height %u, back_buffer_count %u, format %#x, pool %#x, usage %#x, surface %p, shared_handle %p.\n",
+            iface, width, height, back_buffer_count, format, pool, usage, surface, shared_handle);
+
+    if (back_buffer_count || usage)
+    {
+        FIXME("Back buffers %u, usage %#x not implemented.\n", back_buffer_count, usage);
+        if (surface)
+        {
+            *surface = NULL;
+        }
+        return E_NOTIMPL;
+    }
+    if (surface_pool > D3DPOOL_SCRATCH)
+    {
+        surface_pool = D3DPOOL_DEFAULT;
+    }
+    return d3d9_device_CreateOffscreenPlainSurface(&device->IDirect3DDevice9Ex_iface, width, height, format, surface_pool, surface, shared_handle);
+}
+
+static HRESULT WINAPI d3d9_video_device_GetDXVACompressedBufferInfo(IDirect3DVideoDevice9 *iface, GUID *guid, void *uncompressed_info,
+        DWORD *buffer_count, void *buffer_info)
+{
+    FIXME("iface %p, guid %s: no DirectX Video Acceleration.\n", iface, debugstr_guid(guid));
+
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI d3d9_video_device_GetDXVAGuids(IDirect3DVideoDevice9 *iface, DWORD *guid_count, GUID *guids)
+{
+    FIXME("iface %p: no DirectX Video Acceleration.\n", iface);
+
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI d3d9_video_device_GetDXVAInternalInfo(IDirect3DVideoDevice9 *iface, GUID *guid, void *uncompressed_info,
+        DWORD *memory_used)
+{
+    FIXME("iface %p, guid %s: no DirectX Video Acceleration.\n", iface, debugstr_guid(guid));
+
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI d3d9_video_device_GetUncompressedDXVAFormats(IDirect3DVideoDevice9 *iface, GUID *guid, DWORD *format_count,
+        D3DFORMAT *formats)
+{
+    FIXME("iface %p, guid %s: no DirectX Video Acceleration.\n", iface, debugstr_guid(guid));
+
+    return E_NOTIMPL;
+}
+
+/* No DirectX Video Acceleration: VMR-9 then goes on without deinterlacing, colour controls and COPP. */
+static HRESULT WINAPI d3d9_video_device_CreateDXVADevice(IDirect3DVideoDevice9 *iface, GUID *guid, void *uncompressed_info, void *data,
+        DWORD data_size, IUnknown **dxva_device)
+{
+    FIXME("iface %p, guid %s: no DirectX Video Acceleration.\n", iface, debugstr_guid(guid));
+
+    if (dxva_device)
+    {
+        *dxva_device = NULL;
+    }
+    return E_NOTIMPL;
+}
+
+static const IDirect3DVideoDevice9Vtbl d3d9_video_device_vtbl =
+{
+    d3d9_video_device_QueryInterface,
+    d3d9_video_device_AddRef,
+    d3d9_video_device_Release,
+    d3d9_video_device_CreateSurface,
+    d3d9_video_device_GetDXVACompressedBufferInfo,
+    d3d9_video_device_GetDXVAGuids,
+    d3d9_video_device_GetDXVAInternalInfo,
+    d3d9_video_device_GetUncompressedDXVAFormats,
+    d3d9_video_device_CreateDXVADevice,
+};
+
 static const struct IDirect3DDevice9ExVtbl d3d9_device_vtbl =
 {
     /* IUnknown */
@@ -3711,6 +3827,7 @@ HRESULT device_init_d3d9(struct d3d9_device *device, struct d3d9 *parent, struct
         FIXME("Ignoring display mode.\n");
 
     device->IDirect3DDevice9Ex_iface.lpVtbl = &d3d9_device_vtbl;
+    device->IDirect3DVideoDevice9_iface.lpVtbl = &d3d9_video_device_vtbl;
     device->device_parent.ops = &d3d9_wined3d_device_parent_ops;
     device->refcount = 1;
 
