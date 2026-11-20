@@ -148,9 +148,40 @@ enum d3d9_device_state
     D3D9_DEVICE_STATE_NOT_RESET,
 };
 
+/*
+ * IDirect3DVideoDevice9, the private interface of Microsoft's d3d9.dll to DirectX Video Acceleration. DirectShow's Video Mixing Renderer 9
+ * creates itself only on a device that has it and asks for it again with every device it is given. It calls CreateSurface and
+ * CreateDXVADevice; the four methods between them it never calls, and their arguments are known only as far as named here.
+ */
+DEFINE_GUID(IID_IDirect3DVideoDevice9, 0x694036ac, 0x542a, 0x4a3a, 0x9a, 0x32, 0x53, 0xbc, 0x20, 0x00, 0x2c, 0x1b);
+
+typedef struct IDirect3DVideoDevice9 IDirect3DVideoDevice9;
+
+typedef struct IDirect3DVideoDevice9Vtbl
+{
+    HRESULT (WINAPI *QueryInterface)(IDirect3DVideoDevice9 *iface, REFIID riid, void **out);
+    ULONG (WINAPI *AddRef)(IDirect3DVideoDevice9 *iface);
+    ULONG (WINAPI *Release)(IDirect3DVideoDevice9 *iface);
+    HRESULT (WINAPI *CreateSurface)(IDirect3DVideoDevice9 *iface, UINT width, UINT height, UINT back_buffer_count, D3DFORMAT format,
+            D3DPOOL pool, DWORD usage, IDirect3DSurface9 **surface, HANDLE *shared_handle);
+    HRESULT (WINAPI *GetDXVACompressedBufferInfo)(IDirect3DVideoDevice9 *iface, GUID *guid, void *uncompressed_info, DWORD *buffer_count,
+            void *buffer_info);
+    HRESULT (WINAPI *GetDXVAGuids)(IDirect3DVideoDevice9 *iface, DWORD *guid_count, GUID *guids);
+    HRESULT (WINAPI *GetDXVAInternalInfo)(IDirect3DVideoDevice9 *iface, GUID *guid, void *uncompressed_info, DWORD *memory_used);
+    HRESULT (WINAPI *GetUncompressedDXVAFormats)(IDirect3DVideoDevice9 *iface, GUID *guid, DWORD *format_count, D3DFORMAT *formats);
+    HRESULT (WINAPI *CreateDXVADevice)(IDirect3DVideoDevice9 *iface, GUID *guid, void *uncompressed_info, void *data, DWORD data_size,
+            IUnknown **dxva_device);
+} IDirect3DVideoDevice9Vtbl;
+
+struct IDirect3DVideoDevice9
+{
+    const IDirect3DVideoDevice9Vtbl *lpVtbl;
+};
+
 struct d3d9_device
 {
     IDirect3DDevice9Ex IDirect3DDevice9Ex_iface;
+    IDirect3DVideoDevice9 IDirect3DVideoDevice9_iface;
     struct wined3d_device_parent device_parent;
     LONG refcount;
     struct wined3d_device *wined3d_device;
@@ -345,6 +376,11 @@ HRESULT query_init(struct d3d9_query *query, struct d3d9_device *device, D3DQUER
 static inline struct d3d9_device *impl_from_IDirect3DDevice9Ex(IDirect3DDevice9Ex *iface)
 {
     return CONTAINING_RECORD(iface, struct d3d9_device, IDirect3DDevice9Ex_iface);
+}
+
+static inline struct d3d9_device *impl_from_IDirect3DVideoDevice9(IDirect3DVideoDevice9 *iface)
+{
+    return CONTAINING_RECORD(iface, struct d3d9_device, IDirect3DVideoDevice9_iface);
 }
 
 #endif /* __WINE_D3D9_PRIVATE_H */
