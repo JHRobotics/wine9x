@@ -27,6 +27,210 @@
 WINE_DEFAULT_DEBUG_CHANNEL(d3d);
 WINE_DECLARE_DEBUG_CHANNEL(fps);
 
+/* Posted to the child window by a thread that does not own it: the child takes WS_CLIPCHILDREN from its parent, in their thread. */
+#define WINED3D_CHILD_UNCLIP_PARENT (WM_APP + 0x3d3)
+/* Set on the child window while its parent is without WS_CLIPCHILDREN because of it; the parent gets the style back when the child goes. */
+#define WINED3D_CHILD_UNCLIPPED_PROPERTY "WineD3D child unclipped"
+
+/* The parent keeps the child's area in its own clip region. DirectShow's old Video Renderer stops using DirectDraw once the clip box of
+ * its window is no simple rectangle; what the parent draws under the child is covered by the child's picture anyway. In the thread of
+ * child and parent. */
+static void child_window_unclip_parent(HWND child)
+{
+    HWND parent = GetParent(child);
+    LONG parent_style;
+
+    if (!parent)
+    {
+        return;
+    }
+    parent_style = GetWindowLongA(parent, GWL_STYLE);
+    if (!(parent_style & WS_CLIPCHILDREN))
+    {
+        return;
+    }
+    TRACE("Taking WS_CLIPCHILDREN from window %p.\n", parent);
+    SetPropA(child, WINED3D_CHILD_UNCLIPPED_PROPERTY, (HANDLE)TRUE);
+    SetWindowLongA(parent, GWL_STYLE, parent_style & ~WS_CLIPCHILDREN);
+}
+
+/* The child window's procedure: it unclips its parent when asked, and gives the parent WS_CLIPCHILDREN back when it is destroyed. */
+static LRESULT CALLBACK child_window_procedure(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
+{
+    if (message == WINED3D_CHILD_UNCLIP_PARENT)
+    {
+        child_window_unclip_parent(window);
+        return 0;
+    }
+    if (message == WM_DESTROY && RemovePropA(window, WINED3D_CHILD_UNCLIPPED_PROPERTY))
+    {
+        HWND parent = GetParent(window);
+
+        if (parent && IsWindow(parent))
+        {
+            LONG parent_style = GetWindowLongA(parent, GWL_STYLE);
+
+            SetWindowLongA(parent, GWL_STYLE, parent_style | WS_CLIPCHILDREN);
+        }
+    }
+    return DefWindowProcA(window, message, wparam, lparam);
+}
+
+/* Players set their renderer window's style after connecting, WS_CLIPCHILDREN with it. Another thread only posts the change: SetWindowLong
+ * would send to the parent's thread while this one may hold the wined3d mutex that thread waits for. */
+static void swapchain_unclip_child_parent(struct wined3d_swapchain *swapchain)
+{
+    LONG parent_style = GetWindowLongA(swapchain->child_parent, GWL_STYLE);
+    DWORD child_thread;
+    DWORD current_thread;
+
+    if (!(parent_style & WS_CLIPCHILDREN))
+    {
+        return;
+    }
+    child_thread = GetWindowThreadProcessId(swapchain->child_window, NULL);
+    current_thread = GetCurrentThreadId();
+    if (child_thread == current_thread)
+    {
+        child_window_unclip_parent(swapchain->child_window);
+        return;
+    }
+    PostMessageA(swapchain->child_window, WINED3D_CHILD_UNCLIP_PARENT, 0, 0);
+}
+
+/* Windows sets a window's pixel format only once; drawing into a child keeps the application's window free for its own OpenGL. */
+static HWND swapchain_create_child_window(struct wined3d_swapchain *swapchain, HWND window)
+{
+    DWORD flags = swapchain->device->wined3d->flags;
+    DWORD window_thread;
+    DWORD current_thread;
+    DWORD error;
+    RECT client_rect;
+    int format;
+    HWND child;
+    HDC dc;
+
+    if (!(flags & WINED3D_CHILD_WINDOW) || (flags & WINED3D_NO3D) || !window)
+    {
+        return window;
+    }
+    window_thread = GetWindowThreadProcessId(window, NULL);
+    current_thread = GetCurrentThreadId();
+    if (window_thread != current_thread)
+    {
+        return window;
+    }
+    if (!(dc = GetDC(window)))
+    {
+        return window;
+    }
+    format = GetPixelFormat(dc);
+    ReleaseDC(window, dc);
+    if (format)
+    {
+        return window;
+    }
+
+    GetClientRect(window, &client_rect);
+    if (!(child = CreateWindowExA(WS_EX_NOPARENTNOTIFY, WINED3D_OPENGL_WINDOW_CLASS_NAME, "WineD3D child window", WS_CHILD | WS_DISABLED | WS_CLIPSIBLINGS, 0, 0, client_rect.right, client_rect.bottom, window, NULL, wined3d_gethInstDLL(), NULL)))
+    {
+        error = GetLastError();
+        ERR("Failed to create a child window for window %p, last error %#x.\n", window, error);
+        return window;
+    }
+    /* A disabled child passes the mouse on to its parent. It stays hidden until WineD3D draws into it (swapchain_show_child_window). */
+    SetWindowPos(child, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    SetWindowLongPtrA(child, GWLP_WNDPROC, (LONG_PTR)child_window_procedure);
+
+    TRACE("Created child window %p for window %p.\n", child, window);
+    swapchain->child_window = child;
+    swapchain->child_parent = window;
+    swapchain_unclip_child_parent(swapchain);
+    return child;
+}
+
+static void swapchain_destroy_child_window(struct wined3d_swapchain *swapchain)
+{
+    if (!swapchain->child_window)
+    {
+        return;
+    }
+
+    /* The child gives its parent WS_CLIPCHILDREN back as it is destroyed (child_window_procedure), in their thread. */
+    TRACE("Destroying child window %p.\n", swapchain->child_window);
+    if (!DestroyWindow(swapchain->child_window))
+    {
+        PostMessageA(swapchain->child_window, WM_CLOSE, 0, 0);
+    }
+    swapchain->child_window = NULL;
+    swapchain->child_parent = NULL;
+}
+
+void swapchain_update_child_window(struct wined3d_swapchain *swapchain)
+{
+    RECT parent_rect, child_rect;
+    UINT position_flags = SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE;
+    DWORD child_thread;
+    DWORD current_thread;
+
+    if (!swapchain->child_window)
+    {
+        return;
+    }
+    swapchain_unclip_child_parent(swapchain);
+
+    GetClientRect(swapchain->child_parent, &parent_rect);
+    GetClientRect(swapchain->child_window, &child_rect);
+    if (parent_rect.right == child_rect.right && parent_rect.bottom == child_rect.bottom)
+    {
+        return;
+    }
+
+    /* DirectShow's renderers set DirectDraw up in the player's thread and draw from a streaming thread: from a thread that does not own
+     * the child, the new size is posted -- a sent message would wait for a thread that may be waiting for this one. */
+    child_thread = GetWindowThreadProcessId(swapchain->child_window, NULL);
+    current_thread = GetCurrentThreadId();
+    if (child_thread != current_thread)
+    {
+        position_flags |= SWP_ASYNCWINDOWPOS;
+    }
+
+    TRACE("Resizing child window %p to %ldx%ld.\n", swapchain->child_window, parent_rect.right, parent_rect.bottom);
+    SetWindowPos(swapchain->child_window, NULL, 0, 0, parent_rect.right, parent_rect.bottom, position_flags);
+}
+
+/* The child window becomes visible when WineD3D first draws into it. Until then it covers nothing: DirectShow's old Video Renderer sets
+ * DirectDraw up on its window even behind the Overlay Mixer, which draws the picture, and the parent keeps its whole visible region. */
+void swapchain_show_child_window(struct wined3d_swapchain *swapchain)
+{
+    LONG child_style;
+    DWORD child_thread;
+    DWORD current_thread;
+
+    if (!swapchain->child_window)
+    {
+        return;
+    }
+    child_style = GetWindowLongA(swapchain->child_window, GWL_STYLE);
+    if (child_style & WS_VISIBLE)
+    {
+        return;
+    }
+
+    swapchain_update_child_window(swapchain);
+    TRACE("Showing child window %p.\n", swapchain->child_window);
+    child_thread = GetWindowThreadProcessId(swapchain->child_window, NULL);
+    current_thread = GetCurrentThreadId();
+    if (child_thread != current_thread)
+    {
+        ShowWindowAsync(swapchain->child_window, SW_SHOWNA);
+    }
+    else
+    {
+        ShowWindow(swapchain->child_window, SW_SHOWNA);
+    }
+}
+
 static void swapchain_cleanup(struct wined3d_swapchain *swapchain)
 {
     HRESULT hr;
@@ -65,6 +269,7 @@ static void swapchain_cleanup(struct wined3d_swapchain *swapchain)
         context_destroy(swapchain->device, swapchain->context[i]);
     }
     free(swapchain->context);
+    swapchain_destroy_child_window(swapchain);
 
     /* Restore the screen resolution if we rendered in fullscreen.
      * This will restore the screen resolution to what it was before creating
@@ -127,10 +332,15 @@ void CDECL wined3d_swapchain_set_window(struct wined3d_swapchain *swapchain, HWN
     window = device_own_window(swapchain->device, window);
     if (window == swapchain->win_handle)
         return;
+    if (swapchain->child_window && window == swapchain->child_parent)
+    {
+        return;
+    }
 
     TRACE("Setting swapchain %p window from %p to %p.\n",
             swapchain, swapchain->win_handle, window);
-    swapchain->win_handle = window;
+    swapchain_destroy_child_window(swapchain);
+    swapchain->win_handle = swapchain_create_child_window(swapchain, window);
 }
 
 HRESULT CDECL wined3d_swapchain_present(struct wined3d_swapchain *swapchain,
@@ -438,6 +648,7 @@ static void swapchain_gl_present(struct wined3d_swapchain *swapchain, const RECT
     RECT src_rect, dst_rect;
     BOOL render_to_fbo;
 
+    swapchain_show_child_window(swapchain);
     context = context_acquire(swapchain->device, back_buffer);
     if (!context->valid)
     {
@@ -736,6 +947,7 @@ static void swapchain_update_render_to_fbo(struct wined3d_swapchain *swapchain)
         return;
     }
 
+    swapchain_update_child_window(swapchain);
     GetClientRect(swapchain->win_handle, &client_rect);
 
     TRACE("Backbuffer %ux%u, window %ux%u.\n",
@@ -789,8 +1001,8 @@ static HRESULT swapchain_init(struct wined3d_swapchain *swapchain, struct wined3
     swapchain->parent = parent;
     swapchain->parent_ops = parent_ops;
     swapchain->ref = 1;
-    swapchain->win_handle = window;
     swapchain->device_window = window;
+    swapchain->win_handle = swapchain_create_child_window(swapchain, window);
 
     if (FAILED(hr = wined3d_get_adapter_display_mode(device->wined3d,
             adapter->ordinal, &swapchain->original_mode, NULL)))
@@ -1036,6 +1248,7 @@ err:
         }
         free(swapchain->context);
     }
+    swapchain_destroy_child_window(swapchain);
 
     if (swapchain->front_buffer)
     {

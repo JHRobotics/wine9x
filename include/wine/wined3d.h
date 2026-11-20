@@ -1241,6 +1241,10 @@ enum wined3d_display_rotation
 #define WINED3D_HANDLE_RESTORE                                  0x00000040
 #define WINED3D_PIXEL_CENTER_INTEGER                            0x00000080
 #define WINED3D_LEGACY_FFP_LIGHTING                             0x00000100
+#define WINED3D_CHILD_WINDOW                                    0x00000200
+
+/* The window class of WineD3D's own windows, the child window of WINED3D_CHILD_WINDOW among them. */
+#define WINED3D_WINDOW_CLASS_NAME                               "WineD3D_OpenGL"
 
 #define WINED3D_RESZ_CODE                                       0x7fa05000
 

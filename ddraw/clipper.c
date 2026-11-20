@@ -97,13 +97,48 @@ static HRESULT WINAPI ddraw_clipper_SetHWnd(IDirectDrawClipper *iface, DWORD fla
     return DD_OK;
 }
 
+/* Removes the window's visible children from the region, except WineD3D's own windows: the child window WINED3D_CHILD_WINDOW
+ * draws into shows what is blitted onto the window, it does not cover it. */
+static void subtract_child_windows(HWND window, HRGN rgn)
+{
+    char class_name[sizeof(WINED3D_WINDOW_CLASS_NAME)];
+    HWND child;
+
+    for (child = GetWindow(window, GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT))
+    {
+        RECT child_rect;
+        HRGN child_rgn;
+        int class_length;
+        BOOL visible = IsWindowVisible(child);
+
+        if (!visible)
+        {
+            continue;
+        }
+        class_length = GetClassNameA(child, class_name, sizeof(class_name));
+        if (class_length > 0 && !strcmp(class_name, WINED3D_WINDOW_CLASS_NAME))
+        {
+            continue;
+        }
+        GetWindowRect(child, &child_rect);
+        if (!(child_rgn = CreateRectRgnIndirect(&child_rect)))
+        {
+            continue;
+        }
+        CombineRgn(rgn, rgn, child_rgn, RGN_DIFF);
+        DeleteObject(child_rgn);
+    }
+}
+
 static HRGN get_window_region(HWND window)
 {
+    LONG style = GetWindowLongA(window, GWL_STYLE);
     POINT origin;
     HRGN rgn;
     HDC dc;
 
-    if (!(dc = GetDC(window)))
+    /* Without DCX_CLIPCHILDREN the region keeps the children; subtract_child_windows takes out all but WineD3D's own. */
+    if (!(dc = GetDCEx(window, NULL, DCX_CACHE | DCX_CLIPSIBLINGS)))
     {
         WARN("Failed to get dc.\n");
         return NULL;
@@ -131,6 +166,10 @@ static HRGN get_window_region(HWND window)
     }
 
     ReleaseDC(window, dc);
+    if (style & WS_CLIPCHILDREN)
+    {
+        subtract_child_windows(window, rgn);
+    }
     return rgn;
 }
 

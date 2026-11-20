@@ -6093,6 +6093,10 @@ HRESULT CDECL wined3d_surface_blt(struct wined3d_surface *dst_surface, const REC
         src_swapchain = NULL;
 
     dst_swapchain = dst_surface->container->swapchain;
+    if (dst_swapchain && dst_surface->container == dst_swapchain->front_buffer)
+    {
+        swapchain_show_child_window(dst_swapchain);
+    }
 
     /* This isn't strictly needed. FBO blits for example could deal with
      * cross-swapchain blits by first downloading the source to a texture

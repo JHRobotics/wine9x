@@ -2956,6 +2956,10 @@ struct wined3d_swapchain
 
     HDC backup_dc;
     HWND backup_wnd;
+
+    /* With WINED3D_CHILD_WINDOW, win_handle is a child window over the client area of child_parent. */
+    HWND child_window;
+    HWND child_parent;
 };
 
 void x11_copy_to_screen(const struct wined3d_swapchain *swapchain, const RECT *rect) DECLSPEC_HIDDEN;
@@ -2964,6 +2968,8 @@ void wined3d_swapchain_activate(struct wined3d_swapchain *swapchain, BOOL activa
 struct wined3d_context *swapchain_get_context(struct wined3d_swapchain *swapchain) DECLSPEC_HIDDEN;
 void swapchain_destroy_contexts(struct wined3d_swapchain *swapchain) DECLSPEC_HIDDEN;
 HDC swapchain_get_backup_dc(struct wined3d_swapchain *swapchain) DECLSPEC_HIDDEN;
+void swapchain_update_child_window(struct wined3d_swapchain *swapchain) DECLSPEC_HIDDEN;
+void swapchain_show_child_window(struct wined3d_swapchain *swapchain) DECLSPEC_HIDDEN;
 void swapchain_update_draw_bindings(struct wined3d_swapchain *swapchain) DECLSPEC_HIDDEN;
 
 /*****************************************************************************
@@ -3414,7 +3420,7 @@ struct wined3d_context *context_find_create(struct wined3d_device *device,
         const struct wined3d_format *ds_format);
 
 /* The WNDCLASS-Name for the fake window which we use to retrieve the GL capabilities */
-#define WINED3D_OPENGL_WINDOW_CLASS_NAME "WineD3D_OpenGL"
+#define WINED3D_OPENGL_WINDOW_CLASS_NAME WINED3D_WINDOW_CLASS_NAME
 
 #define MAKEDWORD_VERSION(maj, min) (((maj & 0xffffu) << 16) | (min & 0xffffu))
 
