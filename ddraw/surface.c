@@ -4333,13 +4333,38 @@ static HRESULT WINAPI ddraw_surface1_GetClipper(IDirectDrawSurface *iface, IDire
  *  DD_OK on success
  *
  *****************************************************************************/
+/* The primary's swapchain draws into its clipper's window, or into the Direct3D window without one: after SetClipper, and after SetHWnd on
+ * the clipper set on it -- the Video Mixing Renderer 7 hands a player's new video window to the same clipper. Under the wined3d mutex. */
+void ddraw_surface_follow_clipper_window(struct ddraw_surface *surface)
+{
+    HWND clipper_window = NULL;
+
+    if (!(surface->surface_desc.ddsCaps.dwCaps & DDSCAPS_PRIMARYSURFACE) || !surface->ddraw->wined3d_swapchain)
+    {
+        return;
+    }
+    if (surface->clipper)
+    {
+        clipper_window = surface->clipper->window;
+    }
+    if (clipper_window)
+    {
+        wined3d_swapchain_set_window(surface->ddraw->wined3d_swapchain, clipper_window);
+        ddraw_set_swapchain_window(surface->ddraw, clipper_window);
+    }
+    else
+    {
+        wined3d_swapchain_set_window(surface->ddraw->wined3d_swapchain, surface->ddraw->d3d_window);
+        ddraw_set_swapchain_window(surface->ddraw, surface->ddraw->dest_window);
+    }
+}
+
 static HRESULT WINAPI ddraw_surface7_SetClipper(IDirectDrawSurface7 *iface,
         IDirectDrawClipper *iclipper)
 {
     struct ddraw_surface *This = impl_from_IDirectDrawSurface7(iface);
     struct ddraw_clipper *clipper = unsafe_impl_from_IDirectDrawClipper(iclipper);
     struct ddraw_clipper *old_clipper = This->clipper;
-    HWND clipWindow;
 
     TRACE("iface %p, clipper %p.\n", iface, iclipper);
 
@@ -4355,26 +4380,19 @@ static HRESULT WINAPI ddraw_surface7_SetClipper(IDirectDrawSurface7 *iface,
     if (clipper != NULL)
         IDirectDrawClipper_AddRef(iclipper);
     if (old_clipper)
-        IDirectDrawClipper_Release(&old_clipper->IDirectDrawClipper_iface);
-
-    if ((This->surface_desc.ddsCaps.dwCaps & DDSCAPS_PRIMARYSURFACE) && This->ddraw->wined3d_swapchain)
     {
-        clipWindow = NULL;
-        if(clipper) {
-            IDirectDrawClipper_GetHWnd(iclipper, &clipWindow);
-        }
-
-        if (clipWindow)
+        if (old_clipper->primary == This)
         {
-            wined3d_swapchain_set_window(This->ddraw->wined3d_swapchain, clipWindow);
-            ddraw_set_swapchain_window(This->ddraw, clipWindow);
+            old_clipper->primary = NULL;
         }
-        else
-        {
-            wined3d_swapchain_set_window(This->ddraw->wined3d_swapchain, This->ddraw->d3d_window);
-            ddraw_set_swapchain_window(This->ddraw, This->ddraw->dest_window);
-        }
+        IDirectDrawClipper_Release(&old_clipper->IDirectDrawClipper_iface);
     }
+    if (clipper && (This->surface_desc.ddsCaps.dwCaps & DDSCAPS_PRIMARYSURFACE))
+    {
+        clipper->primary = This;
+    }
+
+    ddraw_surface_follow_clipper_window(This);
 
     wined3d_mutex_unlock();
 
@@ -5651,7 +5669,13 @@ static void STDMETHODCALLTYPE ddraw_surface_wined3d_object_destroyed(void *paren
     list_remove(&surface->surface_list_entry);
 
     if (surface->clipper)
+    {
+        if (surface->clipper->primary == surface)
+        {
+            surface->clipper->primary = NULL;
+        }
         IDirectDrawClipper_Release(&surface->clipper->IDirectDrawClipper_iface);
+    }
 
     if (surface == surface->ddraw->primary)
         surface->ddraw->primary = NULL;
