@@ -1534,6 +1534,16 @@ static HRESULT WINAPI ddraw7_GetCaps(IDirectDraw7 *iface, DDCAPS *DriverCaps, DD
     caps.dwCaps |= DDCAPS_ALIGNSTRIDE;
     caps.dwAlignStrideAlign = DDRAW_STRIDE_ALIGNMENT;
 
+    /* Overlays: DirectShow's Overlay Mixer and old players use them only where the driver reports them. */
+    caps.dwCaps |= DDCAPS_OVERLAY | DDCAPS_OVERLAYFOURCC | DDCAPS_OVERLAYSTRETCH;
+    caps.dwCKeyCaps |= DDCKEYCAPS_DESTOVERLAY;
+    caps.dwFXCaps |= DDFXCAPS_OVERLAYSHRINKX | DDFXCAPS_OVERLAYSHRINKXN | DDFXCAPS_OVERLAYSHRINKY | DDFXCAPS_OVERLAYSHRINKYN
+            | DDFXCAPS_OVERLAYSTRETCHX | DDFXCAPS_OVERLAYSTRETCHXN | DDFXCAPS_OVERLAYSTRETCHY | DDFXCAPS_OVERLAYSTRETCHYN;
+    caps.ddsCaps.dwCaps |= DDSCAPS_OVERLAY;
+    caps.dwMaxVisibleOverlays = DDRAW_MAX_VISIBLE_OVERLAYS;
+    caps.dwMinOverlayStretch = DDRAW_OVERLAY_MIN_STRETCH;
+    caps.dwMaxOverlayStretch = DDRAW_OVERLAY_MAX_STRETCH;
+
     if(DriverCaps)
     {
         DD_STRUCT_COPY_BYSIZE(DriverCaps, &caps);

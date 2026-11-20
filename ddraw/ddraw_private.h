@@ -59,6 +59,12 @@ struct FvfToDecl
 
 #define DDRAW_STRIDE_ALIGNMENT  8
 
+/* Overlays are laid over the window's front buffer, or blitted onto a destination that is no window's primary (ddraw_surface_show_overlay):
+ * one is shown at a time, stretched by a factor of 0.1 to 32, in thousandths as DDCAPS counts them. */
+#define DDRAW_MAX_VISIBLE_OVERLAYS  1
+#define DDRAW_OVERLAY_MIN_STRETCH   100
+#define DDRAW_OVERLAY_MAX_STRETCH   32000
+
 #define DDRAW_WINED3D_FLAGS     (WINED3D_LEGACY_DEPTH_BIAS | WINED3D_VIDMEM_ACCOUNTING \
         | WINED3D_RESTORE_MODE_ON_ACTIVATE | WINED3D_FOCUS_MESSAGES | WINED3D_PIXEL_CENTER_INTEGER)
 
@@ -193,6 +199,14 @@ struct ddraw_surface
     struct list             surface_list_entry;
 
     DWORD                   Handle;
+
+    /* An overlay's place as UpdateOverlay and SetOverlayPosition left it: it is shown on the destination after each change and Flip. */
+    struct ddraw_surface    *overlay_destination;
+    RECT                    overlay_source_rect;
+    RECT                    overlay_destination_rect;
+    BOOL                    overlay_shown;
+    /* On a destination: how many overlays it shows (ddraw_surface_set_overlay_state). */
+    unsigned int            shown_overlay_count;
 };
 
 struct ddraw_texture
